@@ -42,6 +42,7 @@
         "/temp/",
         "/server*.json",
         "/*.code-workspace",
+        "/commandbox-deploybot-logo.avif",
         "/node_modules/",
         "**/*.bak",
         "**/*.zip",
