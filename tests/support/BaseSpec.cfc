@@ -121,16 +121,21 @@ component extends="testbox.system.BaseSpec" {
 		return pusher;
 	}
 
-	/** Builds the struct DeploybotClient returns for a JSON response. */
-	struct function jsonResponse( required numeric statusCode, struct json = {} ){
-		return { statusCode : arguments.statusCode, isJson : true, json : arguments.json };
+	/** Builds the struct DeploybotClient returns for a JSON response: DeployBot's API envelope around data. */
+	struct function jsonResponse( required numeric statusCode, struct data = {}, array messages = [] ){
+		var failed = len( arguments.data.errorCode ?: "" ) > 0 || arguments.statusCode >= 400;
+		return {
+			statusCode : arguments.statusCode,
+			isJson     : true,
+			json       : { data : arguments.data, error : failed, messages : arguments.messages }
+		};
 	}
 
 	/** Builds a successful dry-run or push response. */
 	struct function okResponse( struct diff = {}, array steps = [] ){
 		return jsonResponse( 200, {
 			ok         : true,
-			error      : "",
+			errorCode  : "",
 			dryRun     : false,
 			path       : "C:\websites\x\.env",
 			diff       : { added : arguments.diff.added ?: [], removed : arguments.diff.removed ?: [], changed : arguments.diff.changed ?: [] },

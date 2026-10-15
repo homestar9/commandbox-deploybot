@@ -15,4 +15,4 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   It runs locally and never prints values.
 - `box deploybot env push` sends `.env.production` to DeployBot. It shows a dry-run diff of key
   names, asks for confirmation, and prints each deploy step. It supports `--force`, `--yes`, and
-  `--dryRun`.
+  `--dryRun`. It needs a DeployBot with the REST API at `/api/v1`.

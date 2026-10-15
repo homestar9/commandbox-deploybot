@@ -9,17 +9,18 @@
  *  4. Ask for confirmation unless yes is true.
  *  5. Push for real and print each deploy step, whether the server rolled back, and the record URL.
  *
- * The server response is JSON:
+ * The server response is DeployBot's API envelope, { data, error, messages }. For a push, data is:
  *
- *   { ok, error, dryRun, path, diff : { added, removed, changed }, missing, extra,
+ *   { ok, errorCode, dryRun, path, diff : { added, removed, changed }, missing, extra,
  *     steps : [ { id, status, summary } ], rolledBack, deployId, recordUrl }
  *
- * The error field is one of: unauthorized, locked, too_large, invalid_body, missing_keys,
- * health_failed, reinit_failed, write_failed, https_required, rate_limited, method, internal.
+ * A refusal carries only { errorCode } in data. errorCode is one of: unauthorized, locked,
+ * too_large, invalid_body, missing_keys, health_failed, reinit_failed, write_failed,
+ * https_required, rate_limited, method, not_found, internal. messages says it in words.
  * Status codes: 200 ok or dry run, 400, 401 (also for an unknown site), 403 https_required, 404
- * (an address outside DEPLOYBOT_ADMIN_ALLOWLIST gets the plain 404 page), 409 locked, 413,
- * 422 missing_keys, 429 rate limited, 500 write_failed or internal, and 502 health_failed or
- * reinit_failed.
+ * (no such API address; an address outside DEPLOYBOT_ADMIN_ALLOWLIST gets the plain 404 page),
+ * 405, 409 locked, 413, 422 missing_keys, 429 rate limited, 500 write_failed or internal, and 502
+ * health_failed or reinit_failed.
  *
  * This component never prints the env file values or the token. It prints key names, step
  * summaries from the server, and the record URL.
@@ -112,15 +113,15 @@ component extends="commandbox-deploybot.models.BaseService" {
 	}
 
 	/**
-	 * Turns a client response into the server's result struct. It throws a Deploybot exception
-	 * for every response that is not ok. When the response carries steps or missing keys, it
-	 * prints them first.
+	 * Turns a client response into the server's result struct (the envelope's data). It throws a
+	 * Deploybot exception for every response that is not ok. When the response carries steps or
+	 * missing keys, it prints them first.
 	 *
 	 * @response The struct from DeploybotClient: { statusCode, isJson, json }.
 	 */
 	struct function interpret( required struct response ){
 		var status = arguments.response.statusCode;
-		var data   = arguments.response.json;
+		var data   = arguments.response.json.keyExists( "data" ) && isStruct( arguments.response.json.data ) ? arguments.response.json.data : {};
 
 		// DeployBot answers an address outside DEPLOYBOT_ADMIN_ALLOWLIST with its plain 404 page,
 		// so a 404 is far more often the allowlist than a wrong URL.
@@ -130,7 +131,7 @@ component extends="commandbox-deploybot.models.BaseService" {
 				[
 					"If DEPLOYBOT_ADMIN_ALLOWLIST is set on the server, add this computer's public address to it.",
 					"Check that deploybot.url in box.json points to the DeployBot server.",
-					"The server may run a DeployBot version without env push."
+					"The server may run a DeployBot version without the /api/v1 env push."
 				],
 				"What to do",
 				"Deploybot.NotFound"
@@ -151,7 +152,8 @@ component extends="commandbox-deploybot.models.BaseService" {
 			return data;
 		}
 
-		var errorCode = data.error ?: "";
+		var errorCode = data.errorCode ?: "";
+		var said      = serverMessage( arguments.response.json );
 		if ( status == 401 || errorCode == "unauthorized" ) {
 			fail(
 				"DeployBot rejected the request: the token is wrong, or the site slug is not known.",
@@ -208,9 +210,22 @@ component extends="commandbox-deploybot.models.BaseService" {
 			stop( "DeployBot hit an internal error (#len( errorCode ) ? errorCode : "HTTP 500"#). Nothing was written. Check DeployBot's log.", "Deploybot.ServerError" );
 		}
 		if ( len( errorCode ) ) {
-			stop( "DeployBot reported an error: #errorCode# (HTTP #status#).", "Deploybot.Http" );
+			stop( "DeployBot reported an error: #errorCode# (HTTP #status#).#said#", "Deploybot.Http" );
 		}
-		stop( "DeployBot answered with an unexpected result (HTTP #status#).", "Deploybot.Http" );
+		stop( "DeployBot answered with an unexpected result (HTTP #status#).#said#", "Deploybot.Http" );
+	}
+
+	/**
+	 * The server's first message, as " It says: <message>", or an empty string when it sent none.
+	 *
+	 * @json The parsed response envelope.
+	 */
+	private string function serverMessage( required struct json ){
+		var messages = arguments.json.messages ?: [];
+		if ( isArray( messages ) && messages.len() && isSimpleValue( messages[ 1 ] ) && len( messages[ 1 ] ) ) {
+			return " It says: " & messages[ 1 ];
+		}
+		return "";
 	}
 
 	/**

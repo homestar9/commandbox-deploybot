@@ -188,7 +188,7 @@ component extends="tests.support.BaseSpec" {
 					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
 					fakeClient.respond( jsonResponse( 502, {
 						ok         : false,
-						error      : "health_failed",
+						errorCode  : "health_failed",
 						steps      : [
 							{ id : "write", status : "success", summary : "Wrote the file" },
 							{ id : "http.health", status : "failed", summary : "HTTP 500" },
@@ -211,24 +211,25 @@ component extends="tests.support.BaseSpec" {
 
 			describe( "error mapping", function(){
 				var cases = [
-					{ status : 401, json : { ok : false, error : "unauthorized" }, type : "Deploybot.Unauthorized", regex : "token is wrong, or the site slug" },
-					{ status : 409, json : { ok : false, error : "locked" }, type : "Deploybot.Locked", regex : "deploy is running" },
-					{ status : 413, json : { ok : false, error : "too_large" }, type : "Deploybot.TooLarge", regex : "too large" },
-					{ status : 400, json : { ok : false, error : "invalid_body" }, type : "Deploybot.InvalidBody", regex : "invalid_body" },
-					{ status : 422, json : { ok : false, error : "missing_keys", missing : [ "A_KEY", "B_KEY" ] }, type : "Deploybot.MissingKeys", regex : "2 missing keys" },
+					{ status : 401, json : { ok : false, errorCode : "unauthorized" }, type : "Deploybot.Unauthorized", regex : "token is wrong, or the site slug" },
+					{ status : 409, json : { ok : false, errorCode : "locked" }, type : "Deploybot.Locked", regex : "deploy is running" },
+					{ status : 413, json : { ok : false, errorCode : "too_large" }, type : "Deploybot.TooLarge", regex : "too large" },
+					{ status : 400, json : { ok : false, errorCode : "invalid_body" }, type : "Deploybot.InvalidBody", regex : "invalid_body" },
+					{ status : 422, json : { ok : false, errorCode : "missing_keys", missing : [ "A_KEY", "B_KEY" ] }, type : "Deploybot.MissingKeys", regex : "2 missing keys" },
 					{ status : 429, json : { ok : false }, type : "Deploybot.RateLimited", regex : "rate limiting" },
-					{ status : 502, json : { ok : false, error : "reinit_failed", rolledBack : true }, type : "Deploybot.PushFailed", regex : "did not reinitialize" },
-					{ status : 502, json : { ok : false, error : "health_failed", rolledBack : false }, type : "Deploybot.PushFailed", regex : "did not report a rollback" },
-					{ status : 500, json : { ok : false, error : "write_failed" }, type : "Deploybot.PushFailed", regex : "could not write" },
-					{ status : 500, json : { ok : false, error : "internal" }, type : "Deploybot.ServerError", regex : "internal error" },
-					{ status : 403, json : { ok : false, error : "https_required" }, type : "Deploybot.HttpsRequired", regex : "HTTPS" },
+					{ status : 502, json : { ok : false, errorCode : "reinit_failed", rolledBack : true }, type : "Deploybot.PushFailed", regex : "did not reinitialize" },
+					{ status : 502, json : { ok : false, errorCode : "health_failed", rolledBack : false }, type : "Deploybot.PushFailed", regex : "did not report a rollback" },
+					{ status : 500, json : { ok : false, errorCode : "write_failed" }, type : "Deploybot.PushFailed", regex : "could not write" },
+					{ status : 500, json : { ok : false, errorCode : "internal" }, type : "Deploybot.ServerError", regex : "internal error" },
+					{ status : 403, json : { ok : false, errorCode : "https_required" }, type : "Deploybot.HttpsRequired", regex : "HTTPS" },
 					{ status : 404, json : {}, type : "Deploybot.NotFound", regex : "did not find" },
-					{ status : 503, json : { ok : false, error : "weird" }, type : "Deploybot.Http", regex : "weird" },
-					{ status : 418, json : { ok : false }, type : "Deploybot.Http", regex : "HTTP 418" }
+					{ status : 503, json : { ok : false, errorCode : "weird" }, type : "Deploybot.Http", regex : "weird" },
+					{ status : 418, json : { ok : false }, type : "Deploybot.Http", regex : "HTTP 418" },
+					{ status : 405, json : { errorCode : "method" }, type : "Deploybot.Http", regex : "method \(HTTP 405\)" }
 				];
 				for ( var errorCase in cases ) {
 					( function( errorCase ){
-						var label = "maps HTTP " & errorCase.status & " " & ( errorCase.json.error ?: "" ) & " to " & errorCase.type;
+						var label = "maps HTTP " & errorCase.status & " " & ( errorCase.json.errorCode ?: "" ) & " to " & errorCase.type;
 						it( label, function(){
 							fakeClient.respond( jsonResponse( errorCase.status, errorCase.json ) );
 							expect( function(){
@@ -238,8 +239,15 @@ component extends="tests.support.BaseSpec" {
 					} )( errorCase );
 				}
 
+				it( "passes the server's own words on for an error it has no advice for", function(){
+					fakeClient.respond( jsonResponse( 405, { errorCode : "method" }, [ "GET is not allowed here." ] ) );
+					expect( function(){
+						pusher.run( config = loadConfig( root ) );
+					} ).toThrow( type = "Deploybot.Http", regex = "It says: GET is not allowed here\." );
+				} );
+
 				it( "names the missing keys and suggests --force on a 422", function(){
-					fakeClient.respond( jsonResponse( 422, { ok : false, error : "missing_keys", missing : [ "A_KEY", "B_KEY" ] } ) );
+					fakeClient.respond( jsonResponse( 422, { ok : false, errorCode : "missing_keys", missing : [ "A_KEY", "B_KEY" ] } ) );
 					try {
 						pusher.run( config = loadConfig( root ) );
 					} catch ( any exception ) {
@@ -252,7 +260,7 @@ component extends="tests.support.BaseSpec" {
 				} );
 
 				it( "tells the user to check the slug and run token set on a 401", function(){
-					fakeClient.respond( jsonResponse( 401, { ok : false, error : "unauthorized" } ) );
+					fakeClient.respond( jsonResponse( 401, { ok : false, errorCode : "unauthorized" } ) );
 					try {
 						pusher.run( config = loadConfig( root ) );
 					} catch ( any exception ) {
@@ -288,7 +296,7 @@ component extends="tests.support.BaseSpec" {
 
 				it( "stops on an error from the real push after a good dry run", function(){
 					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
-					fakeClient.respond( jsonResponse( 409, { ok : false, error : "locked" } ) );
+					fakeClient.respond( jsonResponse( 409, { ok : false, errorCode : "locked" } ) );
 					expect( function(){
 						pusher.run( config = loadConfig( root ), yes = true );
 					} ).toThrow( type = "Deploybot.Locked" );
@@ -306,11 +314,11 @@ component extends="tests.support.BaseSpec" {
 							pusher.run( config = loadConfig( root ), yes = true );
 						},
 						function(){
-							fakeClient.respond( jsonResponse( 401, { ok : false, error : "unauthorized" } ) );
+							fakeClient.respond( jsonResponse( 401, { ok : false, errorCode : "unauthorized" } ) );
 							pusher.run( config = loadConfig( root ), yes = true );
 						},
 						function(){
-							fakeClient.respond( jsonResponse( 422, { ok : false, error : "missing_keys", missing : [ "A_KEY" ] } ) );
+							fakeClient.respond( jsonResponse( 422, { ok : false, errorCode : "missing_keys", missing : [ "A_KEY" ] } ) );
 							pusher.run( config = loadConfig( root ), yes = true );
 						},
 						function(){
@@ -347,9 +355,9 @@ component extends="tests.support.BaseSpec" {
 		array extra   = []
 	){
 		var response = okResponse( { added : arguments.added, removed : arguments.removed, changed : arguments.changed } );
-		response.json.dryRun  = true;
-		response.json.missing = arguments.missing;
-		response.json.extra   = arguments.extra;
+		response.json.data.dryRun  = true;
+		response.json.data.missing = arguments.missing;
+		response.json.data.extra   = arguments.extra;
 		return response;
 	}
 

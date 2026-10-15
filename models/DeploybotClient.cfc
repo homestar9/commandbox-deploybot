@@ -4,12 +4,13 @@
  *
  * The server contract:
  *
- *   POST {url}/api/sites/{slug}/env?dryRun=true|false&force=true|false
+ *   POST {url}/api/v1/sites/{slug}/env?dryRun=true|false&force=true|false
  *   Authorization: Bearer <envToken>
  *   Content-Type: text/plain; charset=utf-8
  *   Body: the raw .env text, at most 64 KB.
  *
- * The response is JSON. See EnvPusher for the fields and the status codes.
+ * The response is DeployBot's API envelope, { data, error, messages }. See EnvPusher for the
+ * fields and the status codes.
  *
  * This component does not decide what a status code means. It returns the status code and the
  * parsed JSON. It throws a Deploybot exception only when no usable HTTP response arrived:
@@ -42,7 +43,7 @@ component singleton {
 		boolean dryRun = false,
 		boolean force  = false
 	){
-		var endpoint = arguments.url & "/api/sites/" & encodeForURL( arguments.site ) & "/env"
+		var endpoint = arguments.url & "/api/v1/sites/" & encodeForURL( arguments.site ) & "/env"
 			& "?dryRun=" & ( arguments.dryRun ? "true" : "false" )
 			& "&force=" & ( arguments.force ? "true" : "false" );
 		var bearer   = "Bearer " & arguments.token;
