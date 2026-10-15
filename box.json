@@ -1,0 +1,57 @@
+{
+    "name":"commandbox-deploybot",
+    "version":"0.1.0",
+    "author":"Angry Sam Productions, Inc.",
+    "location":"ForgeboxStorage",
+    "slug":"commandbox-deploybot",
+    "type":"commandbox-modules",
+    "keywords":"deploybot,deploy,env,dotenv,commandbox,coldbox,cfml,secrets",
+    "homepage":"https://github.com/homestar9/commandbox-deploybot",
+    "documentation":"https://github.com/homestar9/commandbox-deploybot",
+    "repository":{
+        "type":"git",
+        "url":"https://github.com/homestar9/commandbox-deploybot/"
+    },
+    "bugs":"https://github.com/homestar9/commandbox-deploybot/issues",
+    "shortDescription":"Push a site's production .env to your DeployBot server from CommandBox. Check keys locally, preview the diff, and push.",
+    "license":[
+        {
+            "type":"Apache2",
+            "URL":"https://www.apache.org/licenses/LICENSE-2.0"
+        }
+    ],
+    "contributors":[],
+    "scripts":{
+        "test":"task run taskFile=tests/Run.cfc"
+    },
+    "devDependencies":{
+        "testbox":"7.0.0+19"
+    },
+    "ignore":[
+        "**/.*",
+        "/test/",
+        "/tests/",
+        "/testbox/",
+        "/.test-work/",
+        "/plans/",
+        "/release.json",
+        "/AGENTS.md",
+        "/CLAUDE.md",
+        "/build/",
+        "/modules/",
+        "/temp/",
+        "/server*.json",
+        "/*.code-workspace",
+        "/node_modules/",
+        "**/*.bak",
+        "**/*.zip",
+        "**/*.tar",
+        "**/*.tar.gz",
+        "**/*.tgz",
+        "**/*.7z",
+        "**/*.rar"
+    ],
+    "installPaths":{
+        "testbox":"testbox/"
+    }
+}

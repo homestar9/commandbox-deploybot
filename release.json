@@ -1,0 +1,12 @@
+{
+    "requires":"3.0.0",
+    "branch":"main",
+    "changelog":"CHANGELOG.md",
+    "testRunner":"",
+    "runTests":false,
+    "publish":{
+        "forgebox":true,
+        "github":true
+    },
+    "engines":[]
+}

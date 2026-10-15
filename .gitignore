@@ -1,0 +1,22 @@
+# Local environment and editor settings
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# CommandBox
+.engine/
+modules/
+testbox/
+server-*.json
+
+# Tests
+.test-work/
+
+# AI
+plans/*
+
+# OS noise
+Thumbs.db
+.DS_Store
