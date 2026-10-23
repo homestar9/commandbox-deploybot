@@ -1,6 +1,6 @@
 {
     "requires":"3.0.0",
-    "branch":"main",
+    "branch":"master",
     "changelog":"CHANGELOG.md",
     "testRunner":"",
     "runTests":false,
