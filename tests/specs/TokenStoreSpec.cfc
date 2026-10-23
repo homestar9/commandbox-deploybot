@@ -50,6 +50,25 @@ component extends="tests.support.BaseSpec" {
 				expect( store.get( "deploybot.example.com", "my-site" ) ).toBe( "" );
 			} );
 
+			it( "restricts the folder and the file before it writes a token", function(){
+				var calls = [];
+				// restrictAccess is private and does nothing on Windows, so replace it in place.
+				prepareMock( store ).$property(
+					propertyName  = "restrictAccess",
+					propertyScope = "variables",
+					mock          = function( path, mode ){
+						calls.append( { path : arguments.path, mode : arguments.mode, size : fileExists( arguments.path ) ? getFileInfo( arguments.path ).size : -1 } );
+					}
+				);
+				store.set( "deploybot.example.com", "my-site", secretToken );
+
+				expect( calls.len() ).toBe( 2 );
+				expect( calls[ 1 ].mode ).toBe( "700" );
+				expect( calls[ 2 ].mode ).toBe( "600" );
+				expect( calls[ 2 ].path ).toInclude( ".tmp-" );
+				expect( calls[ 2 ].size ).toBe( 0 );
+			} );
+
 			it( "persists to its own file, not the CommandBox config", function(){
 				store.set( "deploybot.example.com", "my.site", secretToken );
 				expect( fileExists( path ) ).toBeTrue();

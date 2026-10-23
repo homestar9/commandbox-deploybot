@@ -24,7 +24,10 @@ The specs don't use it. It is not part of the package.
 
    Run it again after you change the module.
 
-4. In this folder, save the token:
+4. In this folder, copy `sample.env` to `.env.production`. Git ignores `.env.production`, like
+   in a real site. `sample.env` holds fake values only.
+
+5. In this folder, save the token:
 
    ```bash
    box deploybot token set
@@ -41,6 +44,8 @@ box deploybot env push --dryRun
 
 The dry run shows the target file on the server, `SECRET` changed, and `API_KEY` added. That diff
 is against DeployBot's own fixture file. After a real push, the dry run shows "No changes".
+
+This repository is in Dropbox for its owner, so both commands also warn about a synced folder.
 
 A real `box deploybot env push` writes the file. The dummy site is not served, so it has no reinit
 or health URL. DeployBot reports both steps as warnings and does not roll back. The command says

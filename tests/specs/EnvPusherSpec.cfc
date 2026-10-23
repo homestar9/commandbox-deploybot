@@ -7,6 +7,7 @@ component extends="tests.support.BaseSpec" {
 				root  = createTempProject();
 				lines = [];
 				fakeClient = createFakeClient();
+				stubGit();
 				writeBoxJson( root );
 				writeText( root & "/.env.example", "APP_NAME=" & chr( 10 ) & "API_KEY=" );
 				writeText( root & "/.env.production", "APP_NAME=#secretValue#" & chr( 10 ) & "API_KEY=#secretValue#" );
@@ -107,6 +108,22 @@ component extends="tests.support.BaseSpec" {
 					expect( fakeClient.calls()[ 1 ].force ).toBeTrue();
 					expect( fakeClient.calls()[ 2 ].force ).toBeTrue();
 					expect( lines.toList( chr( 10 ) ) ).toInclude( "because of --force" );
+				} );
+
+				it( "stops before any request when git tracks the env file", function(){
+					stubGit( { tracked : true } );
+					expect( function(){
+						pusher.run( config = loadConfig( root ), yes = true );
+					} ).toThrow( type = "Deploybot.EnvTracked", regex = "--force" );
+					expect( fakeClient.calls().len() ).toBe( 0 );
+				} );
+
+				it( "pushes a file that git tracks only with --force, and warns", function(){
+					stubGit( { tracked : true } );
+					fakeClient.respond( diffResponse() );
+					pusher.run( config = loadConfig( root ), force = true );
+					expect( fakeClient.calls().len() ).toBe( 1 );
+					expect( lines.toList( chr( 10 ) ) ).toInclude( "a file that git tracks because of --force" );
 				} );
 
 				it( "sends force=false without --force", function(){

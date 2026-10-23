@@ -7,6 +7,7 @@ component extends="tests.support.BaseSpec" {
 				root  = createTempProject();
 				lines = [];
 				writeBoxJson( root );
+				stubGit();
 				checker = prepareMock( model( "EnvChecker" ) );
 				checker.$property( propertyName = "print", propertyScope = "variables", mock = createRecordingPrinter( lines ) );
 			} );
@@ -81,6 +82,27 @@ component extends="tests.support.BaseSpec" {
 				expect( function(){
 					checker.run( loadConfig( root ) );
 				} ).toThrow( type = "Deploybot.NoExample" );
+			} );
+
+			it( "stops with Deploybot.EnvTracked when git tracks the env file", function(){
+				stubGit( { tracked : true } );
+				writeText( root & "/.env.production", "A=1" );
+				writeText( root & "/.env.example", "A=" );
+				expect( function(){
+					checker.run( loadConfig( root ) );
+				} ).toThrow( type = "Deploybot.EnvTracked" );
+				var output = lines.toList( chr( 10 ) );
+				expect( output ).toInclude( "git rm --cached .env.production" );
+				expect( output ).toInclude( "Change every secret" );
+				expect( output ).notToInclude( "Local check passed" );
+			} );
+
+			it( "warns when .gitignore does not cover the env file", function(){
+				stubGit( { ignored : false } );
+				writeText( root & "/.env.production", "A=1" );
+				writeText( root & "/.env.example", "A=" );
+				checker.run( loadConfig( root ) );
+				expect( lines.toList( chr( 10 ) ) ).toInclude( "not covered by .gitignore" );
 			} );
 
 			it( "never prints a value", function(){

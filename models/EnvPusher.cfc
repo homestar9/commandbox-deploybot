@@ -3,7 +3,8 @@
  *
  * The flow:
  *
- *  1. Run the local check. Missing keys stop the push unless force is true.
+ *  1. Run the local check. A file that git tracks or missing keys stop the push unless force is
+ *     true. A file outside .gitignore or in a cloud-synced folder gets a warning.
  *  2. Send a dry run to the server and print the diff (key names only).
  *  3. Stop here for a dry run, or when nothing changed.
  *  4. Ask for confirmation unless yes is true.
@@ -252,8 +253,8 @@ component extends="commandbox-deploybot.models.BaseService" {
 	}
 
 	/**
-	 * Runs the local check and stops on missing keys unless force is true. With force, a missing
-	 * .env.example or missing keys become warnings.
+	 * Runs the local check and stops on a file that git tracks or on missing keys unless force is
+	 * true. With force, those and a missing .env.example become warnings.
 	 *
 	 * @config The loaded DeploybotConfig.
 	 * @force  True to continue after a failed check.
@@ -261,6 +262,12 @@ component extends="commandbox-deploybot.models.BaseService" {
 	private void function localCheck( required any config, required boolean force ){
 		var checker = service( "EnvChecker" );
 		var result  = {};
+		if ( checker.safety( arguments.config ).tracked ) {
+			if ( !arguments.force ) {
+				stop( "#arguments.config.envFile()# is tracked by git. Remove it from git and change its secrets, or use --force to push anyway.", "Deploybot.EnvTracked" );
+			}
+			warn( "Continuing with a file that git tracks because of --force." );
+		}
 		try {
 			result = checker.report( arguments.config );
 		} catch ( any exception ) {

@@ -8,6 +8,7 @@ component extends="tests.support.BaseSpec" {
 				lines      = [];
 				tokenPath  = tempTokenPath();
 				tokenStore = createTokenStore( tokenPath );
+				stubGit();
 				setup      = prepareMock( model( "SiteSetup" ) );
 				setup.$property( propertyName = "print", propertyScope = "variables", mock = createRecordingPrinter( lines ) );
 				setup.$property( propertyName = "tokenStore", propertyScope = "variables", mock = tokenStore );
@@ -153,6 +154,12 @@ component extends="tests.support.BaseSpec" {
 
 					expect( fileRead( root & "/.env.production", "utf-8" ) ).toBe( "A=#secretValue#" );
 					expect( lines.toList( chr( 10 ) ) ).toInclude( ".env.production already exists" );
+				} );
+
+				it( "reports an env file that git already tracks", function(){
+					stubGit( { tracked : true } );
+					setup.run( root = root, url = "https://deploybot.example.com", site = "my-site" );
+					expect( lines.toList( chr( 10 ) ) ).toInclude( ".env.production is tracked by git" );
 				} );
 
 				it( "warns when there is no .env.example", function(){

@@ -4,8 +4,9 @@
  *
  * Tokens are deliberately NOT kept in the CommandBox user config. CommandBox's config auto-sync
  * (on by default for ForgeBox Pro accounts) uploads that whole file to ForgeBox, and there is no
- * way to exclude a key. This file is outside the CommandBox home, outside any repository, and
- * outside Dropbox; the profile folder is readable only by its owner and Administrators.
+ * way to exclude a key. This file is outside the CommandBox home and outside any repository. On
+ * Windows the profile folder is readable only by its owner, SYSTEM, and Administrators. On macOS
+ * and Linux the file is made readable only by its owner (600) and its folder private (700).
  *
  * Each token is saved under a key built from the DeployBot host and the site slug, so two
  * DeployBot servers that use the same slug do not share a token. Writes go to a temp file that
@@ -145,7 +146,9 @@ component singleton {
 	}
 
 	/**
-	 * Writes every token through a temp file in the same folder, then moves it into place.
+	 * Writes every token through a temp file in the same folder, then moves it into place. On
+	 * macOS and Linux the folder is made private (700) and the temp file is made readable only by
+	 * its owner (600) before any token is written to it.
 	 *
 	 * @tokens key => token.
 	 */
@@ -154,9 +157,31 @@ component singleton {
 		if ( !directoryExists( folder ) ) {
 			directoryCreate( folder );
 		}
+		restrictAccess( folder, "700" );
 		var temp = variables.storePath & ".tmp-" & createUUID();
+		fileWrite( temp, "", "utf-8" );
+		restrictAccess( temp, "600" );
 		fileWrite( temp, serializeJSON( { "tokens" : arguments.tokens } ), "utf-8" );
 		fileMove( temp, variables.storePath );
+	}
+
+	/**
+	 * Sets a Unix access mode on macOS and Linux. Windows keeps the profile folder's access list,
+	 * which already limits it to the owner, SYSTEM, and Administrators.
+	 *
+	 * @path The file or folder.
+	 * @mode The mode, such as "600".
+	 */
+	private void function restrictAccess( required string path, required string mode ){
+		if ( isWindows() ) {
+			return;
+		}
+		fileSetAccessMode( arguments.path, arguments.mode );
+	}
+
+	/** Returns true on Windows. */
+	private boolean function isWindows(){
+		return findNoCase( "windows", server.os.name ) > 0;
 	}
 
 	/**

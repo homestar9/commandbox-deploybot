@@ -3,10 +3,12 @@
  *
  * The check runs on this computer only. It never contacts a server and never prints a value.
  * Missing keys are errors, extra keys are information, and keys with a blank value are warnings.
+ * It also checks where the env file lives (EnvSafety): a file that git tracks is an error.
  */
 component extends="commandbox-deploybot.models.BaseService" {
 
-	property name="envFile" inject="EnvFile@commandbox-deploybot";
+	property name="envFile"   inject="EnvFile@commandbox-deploybot";
+	property name="envSafety" inject="EnvSafety@commandbox-deploybot";
 
 	/**
 	 * Compares env text with example text and returns key names only.
@@ -55,12 +57,25 @@ component extends="commandbox-deploybot.models.BaseService" {
 	}
 
 	/**
+	 * Checks where the env file lives (EnvSafety) and prints what it finds. Returns its result.
+	 *
+	 * @config The loaded DeploybotConfig.
+	 */
+	struct function safety( required any config ){
+		return variables.envSafety.usePrinter( variables.print ).check( arguments.config );
+	}
+
+	/**
 	 * Runs the local check for `deploybot env check`. It prints the comparison and throws
-	 * Deploybot.MissingKeys when keys are missing.
+	 * Deploybot.EnvTracked when git tracks the env file, or Deploybot.MissingKeys when keys are
+	 * missing.
 	 *
 	 * @config The loaded DeploybotConfig.
 	 */
 	struct function run( required any config ){
+		if ( safety( arguments.config ).tracked ) {
+			stop( "#arguments.config.envFile()# is tracked by git. Remove it from git and change its secrets.", "Deploybot.EnvTracked" );
+		}
 		var result = report( arguments.config );
 		if ( result.missing.len() ) {
 			stop( "#result.missing.len()# key#( result.missing.len() == 1 ? "" : "s" )# from .env.example #( result.missing.len() == 1 ? "is" : "are" )# missing in #arguments.config.envFile()#.", "Deploybot.MissingKeys" );

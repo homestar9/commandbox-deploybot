@@ -82,6 +82,18 @@ component extends="testbox.system.BaseSpec" {
 		return printer;
 	}
 
+	/**
+	 * Makes the shared GitInspector answer with a fixed status, so no spec starts git. The
+	 * default is a file in a repository that .gitignore covers. Call it in beforeEach.
+	 */
+	any function stubGit( struct status = {} ){
+		var answer = { known : true, repository : true, tracked : false, ignored : true };
+		answer.append( arguments.status, true );
+		var inspector = prepareMock( model( "GitInspector" ) );
+		inspector.$( "status", answer );
+		return inspector;
+	}
+
 	/** Returns a fake DeployBot client. Queue responses with respond(), then read calls(). */
 	any function createFakeClient(){
 		return new tests.support.FakeClient();
