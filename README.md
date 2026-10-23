@@ -1,5 +1,7 @@
 # commandbox-deploybot
 
+![Commandbox Deploybot Logo](https://github.com/homestar9/commandbox-deploybot/blob/master/commandbox-deploybot-logo.avif?raw=true)
+
 `commandbox-deploybot` adds `box deploybot` commands to
 [CommandBox](https://www.ortussolutions.com/products/commandbox). It is a client for a DeployBot
 server that you run yourself. It pushes a site's production `.env` file to that server.
