@@ -71,6 +71,19 @@ component extends="tests.support.BaseSpec" {
 				}
 			} );
 
+			it( "uses DeployBot's slug rule: lower-case letters, digits, and dashes", function(){
+				for ( var bad in [ "my.site", "my_site", "My-Site", "x-", repeatString( "a", 81 ) ] ) {
+					writeBoxJson( root, { url : "https://deploybot.example.com", site : bad } );
+					expect( function(){
+						loadConfig( root );
+					} ).toThrow( type = "Deploybot.Config", regex = "site slug" );
+				}
+				for ( var good in [ "a", "9", "my-site", "staging-example-com", repeatString( "a", 80 ) ] ) {
+					writeBoxJson( root, { url : "https://deploybot.example.com", site : good } );
+					expect( loadConfig( root ).site() ).toBe( good );
+				}
+			} );
+
 			it( "requires https except for localhost and 127.0.0.1", function(){
 				writeBoxJson( root, { url : "http://deploybot.example.com", site : "my-site" } );
 				expect( function(){

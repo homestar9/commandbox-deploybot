@@ -32,7 +32,7 @@ component extends="tests.support.BaseSpec" {
 			it( "registers all deploybot commands", function(){
 				var hierarchy = application.wirebox.getInstance( "CommandService" ).getCommandHierarchy();
 				expect( hierarchy ).toHaveKey( "deploybot" );
-				expect( commandNames( hierarchy.deploybot ) ).toBe( "env,token" );
+				expect( commandNames( hierarchy.deploybot ) ).toBe( "env,init,token" );
 				expect( commandNames( hierarchy.deploybot.env ) ).toBe( "check,push" );
 				expect( commandNames( hierarchy.deploybot.token ) ).toBe( "clear,set" );
 			} );
@@ -45,6 +45,16 @@ component extends="tests.support.BaseSpec" {
 					names.append( parameter.name & "=" & parameter.default );
 				}
 				expect( names.toList() ).toBe( "force=false,yes=false,dryRun=false" );
+			} );
+
+			it( "keeps the init command parameters", function(){
+				var names = [];
+				for ( var parameter in meta( "commands.deploybot.init" ).functions.filter( function( f ){
+					return f.name == "run";
+				} )[ 1 ].parameters ) {
+					names.append( parameter.name );
+				}
+				expect( names.toList() ).toBe( "url,site,envFile" );
 			} );
 		} );
 	}

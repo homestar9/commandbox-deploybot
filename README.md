@@ -36,6 +36,18 @@ box update commandbox-deploybot --system
 
 ## Set up a site
 
+The quick way is to run this command in the site's repository:
+
+```bash
+box deploybot init
+```
+
+It asks for the DeployBot URL and the site slug. Then it does steps 1 to 4 below. It creates
+`.env.production` from `.env.example` with blank values, and it never overwrites an existing
+file. Fill in the values, then go on with step 5.
+
+To set up a site by hand:
+
 1. Add a `deploybot` block to the site's `box.json`. It holds no secrets, so commit it:
 
    ```json
@@ -48,7 +60,8 @@ box update commandbox-deploybot --system
 
    - `url` is your DeployBot server. It must use `https`. Plain `http` works only for
      `localhost` and `127.0.0.1`, for local testing.
-   - `site` is the site's slug in DeployBot.
+   - `site` is the site's slug in DeployBot. A slug uses lower-case letters, numbers, and
+     dashes, up to 80 characters, like `angrysam-web`.
    - `envFile` is optional. It defaults to `.env.production`.
 
 2. Add `.env.production` to the site's `.gitignore`.
@@ -78,6 +91,21 @@ box update commandbox-deploybot --system
 Run the `box` commands from the site's repository or one of its folders.
 
 ## Commands
+
+### `box deploybot init [url=] [site=] [envFile=]`
+
+Sets up the site. It asks for anything you don't pass. The slug defaults to the `box.json` slug
+or the folder name. On a site that is already set up, the answers default to its settings.
+
+1. Checks the settings. Nothing is written when one is wrong.
+2. Writes the `deploybot` block in `box.json`. It writes `envFile` only when it is not
+   `.env.production`.
+3. Adds the env file to `.gitignore`, unless a rule there already covers it.
+4. Creates the env file from `.env.example`. Every value is blank. Comments stay. An existing env
+   file is never changed.
+5. Offers to save the env token, when none is saved.
+
+Run it again to change the URL or the slug. It makes no network request.
 
 ### `box deploybot token set`
 

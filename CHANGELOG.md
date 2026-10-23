@@ -9,6 +9,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- `box deploybot init` sets up a site. It writes the `deploybot` block in `box.json`, adds the
+  env file to `.gitignore`, creates the env file from `.env.example` with blank values, and offers
+  to save the token. It never overwrites an env file.
+- `deploybot.site` in `box.json` must follow DeployBot's slug rule: lower-case letters, numbers,
+  and dashes, up to 80 characters. A slug with a dot or an underscore stops before any request.
 - `box deploybot token set` and `box deploybot token clear` store and remove a site's env token
   in `~/.deploybot/tokens.json` (never the CommandBox config, which ForgeBox can sync).
 - `box deploybot env check` compares the key names in `.env.production` with `.env.example`.
