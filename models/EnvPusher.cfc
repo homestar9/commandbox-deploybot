@@ -107,9 +107,32 @@ component extends="commandbox-deploybot.models.BaseService" {
 			printRecord( result );
 			stop( "The push finished with a failed step. Check the steps above and the DeployBot record.", "Deploybot.PushFailed" );
 		}
-		good( "Pushed. The site was reinitialized and passed its health check." );
+		printOutcome( result );
 		printRecord( result );
 		return result;
+	}
+
+	/**
+	 * Prints the result of a push that had no failed step. It claims a reinit and a health check
+	 * only when those steps succeeded. A site without a reinit or health URL gets warnings
+	 * instead, and the push still counts as done.
+	 *
+	 * @data The result struct from the server.
+	 */
+	private void function printOutcome( required struct data ){
+		var reinitDone = stepStatus( arguments.data, "http.reinit" ) == "success";
+		var healthDone = stepStatus( arguments.data, "http.health" ) == "success";
+		if ( reinitDone && healthDone ) {
+			good( "Pushed. The site was reinitialized and passed its health check." );
+			return;
+		}
+		warn( "Pushed, with warnings. Check the steps above." );
+		if ( !reinitDone ) {
+			warn( "DeployBot did not reinitialize the site. The site may still use its old settings." );
+		}
+		if ( !healthDone ) {
+			warn( "DeployBot did not check the site's health." );
+		}
 	}
 
 	/**
@@ -284,6 +307,24 @@ component extends="commandbox-deploybot.models.BaseService" {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Returns the status of the step with this id, or an empty string when the result has none.
+	 *
+	 * @data The result struct from the server.
+	 * @id   The step id, such as http.reinit.
+	 */
+	private string function stepStatus( required struct data, required string id ){
+		var steps = arguments.data.steps ?: [];
+		if ( isArray( steps ) ) {
+			for ( var step in steps ) {
+				if ( isStruct( step ) && ( step.id ?: "" ) == arguments.id ) {
+					return step.status ?: "";
+				}
+			}
+		}
+		return "";
 	}
 
 	/**

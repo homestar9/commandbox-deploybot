@@ -163,6 +163,7 @@ component extends="tests.support.BaseSpec" {
 					fakeClient.respond( pushResponse( [
 						{ id : "write", status : "success", summary : "Wrote the file" },
 						{ id : "acl", status : "warning", summary : "ACL skipped" },
+						{ id : "http.reinit", status : "success", summary : "Reinit OK" },
 						{ id : "http.health", status : "success", summary : "Health OK" }
 					] ) );
 					pusher.run( config = loadConfig( root ), yes = true );
@@ -172,7 +173,34 @@ component extends="tests.support.BaseSpec" {
 					expect( output ).toInclude( "[warning] acl - ACL skipped" );
 					expect( output ).toInclude( "[success] http.health - Health OK" );
 					expect( output ).toInclude( "Rolled back: no" );
+					expect( output ).toInclude( "reinitialized and passed its health check" );
 					expect( output ).toInclude( "Record: https://deploybot.example.com/deploys/d1" );
+				} );
+
+				it( "does not claim a reinit or a health check that only warned", function(){
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( pushResponse( [
+						{ id : "write", status : "success", summary : "Wrote the file" },
+						{ id : "http.reinit", status : "warning", summary : "no reinit url configured" },
+						{ id : "http.health", status : "warning", summary : "no health url configured" }
+					] ) );
+					pusher.run( config = loadConfig( root ), yes = true );
+
+					var output = lines.toList( chr( 10 ) );
+					expect( output ).notToInclude( "passed its health check" );
+					expect( output ).toInclude( "Pushed, with warnings" );
+					expect( output ).toInclude( "did not reinitialize the site" );
+					expect( output ).toInclude( "did not check the site's health" );
+				} );
+
+				it( "warns when the result has no reinit or health step", function(){
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( pushResponse() );
+					pusher.run( config = loadConfig( root ), yes = true );
+
+					var output = lines.toList( chr( 10 ) );
+					expect( output ).notToInclude( "passed its health check" );
+					expect( output ).toInclude( "did not reinitialize the site" );
 				} );
 
 				it( "fails when the server says ok but a step failed", function(){
