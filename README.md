@@ -181,6 +181,9 @@ box task run taskFile=tests/Run.cfc :bundles=tests.specs.EnvFileSpec
 
 The specs stub the HTTP client and the CommandBox config service. They never reach a network.
 
+To try the commands against a local DeployBot, use the dummy site in `tests/fixtures/dummy-site`.
+Its README has the steps.
+
 To publish this module, use [commandbox-release](https://github.com/homestar9/commandbox-release).
 `release.json` holds its settings.
 

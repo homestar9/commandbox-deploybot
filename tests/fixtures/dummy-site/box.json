@@ -1,0 +1,7 @@
+{
+    "name":"dummy-site",
+    "deploybot":{
+        "url":"http://127.0.0.1:8080",
+        "site":"dummy-site"
+    }
+}

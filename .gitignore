@@ -13,6 +13,8 @@ server-*.json
 
 # Tests
 .test-work/
+# The dummy site's env file holds fake values only.
+!tests/fixtures/dummy-site/.env.production
 
 # AI
 plans/*
