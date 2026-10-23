@@ -50,7 +50,18 @@
         "**/*.tar.gz",
         "**/*.tgz",
         "**/*.7z",
-        "**/*.rar"
+        "**/*.rar",
+        "/resources/",
+        "/webpack.config.js",
+        "/vite.config.js",
+        "/vitest.config.js",
+        "/docker-compose.yml",
+        "/test-harness/",
+        "/test-results/",
+        "/DEVNOTES.md",
+        "/RELEASE.md",
+        "/package.json",
+        "/package-lock.json"
     ],
     "installPaths":{
         "testbox":"testbox/"
