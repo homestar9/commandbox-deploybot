@@ -54,8 +54,8 @@ To set up a site by hand:
 
    ```json
    "deploybot": {
-       "url": "https://deploybot.angrysam.com",
-       "site": "angrysam-web",
+       "url": "https://deploybot.example.com",
+       "site": "my-site",
        "envFile": ".env.production"
    }
    ```
@@ -63,8 +63,9 @@ To set up a site by hand:
    - `url` is your DeployBot server. It must use `https`. Plain `http` works only for
      `localhost` and `127.0.0.1`, for local testing.
    - `site` is the site's slug in DeployBot. A slug uses lower-case letters, numbers, and
-     dashes, up to 80 characters, like `angrysam-web`.
-   - `envFile` is optional. It defaults to `.env.production`.
+     dashes, up to 80 characters, like `my-site`.
+   - `envFile` is optional. It defaults to `.env.production`. It can be a full path outside the
+     repository. See [Keep the env file safe](#keep-the-env-file-safe).
 
 2. Add `.env.production` to the site's `.gitignore`.
 
@@ -132,9 +133,17 @@ makes no network request and never prints a value.
 The command reads lines like `KEY=value` and `export KEY=value`. It skips lines that start with
 `#`. A byte order mark and Windows line endings are fine.
 
+It also checks where the env file is. It asks git, and skips this part when git is not installed.
+
+- A file that git tracks is an error. Its values are already in the repository history.
+- A file that `.gitignore` does not cover is a warning.
+- A file in a Dropbox, OneDrive, iCloud Drive, or Google Drive folder is a warning. The service
+  keeps a copy of the secrets in the cloud.
+
 ### `box deploybot env push [--force] [--yes] [--dryRun]`
 
-1. Runs the local check. Missing keys stop the push unless you use `--force`.
+1. Runs the local check. A file that git tracks, or missing keys, stop the push unless you use
+   `--force`.
 2. Asks DeployBot for a dry run and prints the key names that would be added, removed, or
    changed. It also prints the keys DeployBot reports as missing or extra.
 3. Stops there with `--dryRun`. It also stops when nothing would change.
@@ -146,7 +155,7 @@ The command exits with an error if any step fails or the server answers with an 
 
 | Flag | Meaning |
 |---|---|
-| `--force` | Push even if keys from `.env.example` are missing. |
+| `--force` | Push even if keys from `.env.example` are missing, or git tracks the env file. |
 | `--yes` | Skip the confirmation question. |
 | `--dryRun` | Show the diff from the server and stop. Nothing changes on the server. |
 
@@ -164,15 +173,33 @@ needs a key it does not have will fail.
 
 ## If DeployBot is not available
 
-Copy the file to `<site>\.env`, one level above the webroot, with FTP. Then reinitialize the
-site with `?fwreinit=<password>`. This skips the validation, backup, and health check.
+Copy the file to the server with an encrypted connection, such as SFTP or a remote desktop
+session. Put it where the site reads its `.env`, outside the webroot. Then reinitialize the
+site. This skips the validation, backup, and health check.
+
+## Keep the env file safe
+
+The env file holds production secrets in plain text. `.gitignore` keeps it out of git, but not
+out of other copies.
+
+- Keep it out of folders that a cloud service syncs. `env check` and `env push` warn about
+  Dropbox, OneDrive, iCloud Drive, and Google Drive. To keep a repository in such a folder, set
+  `envFile` to a full path outside it, such as `C:/Users/me/.deploybot/envs/my-site.env`.
+- Never commit it. `init` adds it to `.gitignore`. If git already tracks it, run
+  `git rm --cached <file>` and change every secret in it. The old values stay in the history.
+- Keep `.env.example` free of real values. `init` copies its keys, not its values.
+- If a secret leaks, change it at its source first. Then push the new file.
+
+On the server, DeployBot writes to a `.env` in the site directory if one is there. Otherwise it
+writes one level above. The push prints the target file. Check that it is not in the webroot.
 
 ## Where the token is saved
 
 Tokens are saved in `~/.deploybot/tokens.json` (on Windows, `%USERPROFILE%\.deploybot\tokens.json`).
-That file is not in any repository, not in Dropbox, and readable only by your Windows account
-and Administrators. Each entry's key is built from the DeployBot host and the site slug, so two
-DeployBot servers that use the same slug do not share a token.
+That file is not in any repository. On Windows, your profile folder is readable only by you,
+SYSTEM, and Administrators. On macOS and Linux, the module makes the file readable only by you
+(mode 600) and its folder private (mode 700). Each entry's key is built from the DeployBot host
+and the site slug, so two DeployBot servers that use the same slug do not share a token.
 
 They are deliberately **not** in the CommandBox user config (`~/.CommandBox/CommandBox.json`).
 CommandBox's config auto-sync, on by default for ForgeBox Pro accounts, uploads that whole file to
@@ -195,6 +222,11 @@ Back up the token file if you like, but you never have to: a lost token is repla
 | The site failed its health check or did not reinitialize (HTTP 502) | DeployBot rolls back. Read the steps and the record URL. |
 | DeployBot did not answer in 120 seconds | The push may still be running. Check the DeployBot deploy log before you try again. |
 | TLS connection failed | Check the certificate and `deploybot.url`. |
+| The env file is tracked by git | Run `git rm --cached <file>`, add it to `.gitignore`, and change every secret in it. |
+
+## Report a security problem
+
+See [SECURITY.md](SECURITY.md). Please don't open a public issue for it.
 
 ## Develop
 
