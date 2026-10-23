@@ -11,6 +11,10 @@ modules/
 testbox/
 server-*.json
 
+# Release builds (commandbox-release)
+.artifacts/
+.tmp/
+
 # Tests
 .test-work/
 # The dummy site's env file holds fake values only.
