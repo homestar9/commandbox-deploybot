@@ -50,6 +50,23 @@ component extends="tests.support.BaseSpec" {
 				expect( envFile.isBlankValue( '"abc' ) ).toBeFalse();
 			} );
 
+			it( "builds a starter file with every value removed", function(){
+				var text = chr( 65279 ) & "## App settings" & chr( 13 ) & chr( 10 )
+					& "APP_NAME=#secretValue#" & chr( 13 ) & chr( 10 )
+					& chr( 13 ) & chr( 10 )
+					& "  export API_KEY = '#secretValue#' ## inline" & chr( 13 ) & chr( 10 )
+					& "not a key line" & chr( 13 ) & chr( 10 )
+					& "EMPTY=";
+				expect( envFile.templateFrom( text ) ).toBe(
+					"## App settings" & chr( 10 ) & "APP_NAME=" & chr( 10 ) & chr( 10 ) & "  export API_KEY=" & chr( 10 ) & "not a key line" & chr( 10 ) & "EMPTY=" & chr( 10 )
+				);
+			} );
+
+			it( "drops the rest of a multi-line value from the starter file", function(){
+				var text = "CERT=""-----BEGIN" & chr( 10 ) & "#secretValue#" & chr( 10 ) & "-----END""" & chr( 10 ) & "NEXT=1" & chr( 10 );
+				expect( envFile.templateFrom( text ) ).toBe( "CERT=" & chr( 10 ) & "NEXT=" & chr( 10 ) );
+			} );
+
 			it( "reads the file as raw bytes and keeps the byte order mark and CRLF", function(){
 				var root = createTempProject();
 				try {

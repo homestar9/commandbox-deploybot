@@ -39,18 +39,33 @@ component {
 		if ( !isStruct( packageData ) || !packageData.keyExists( "deploybot" ) || !isStruct( packageData.deploybot ) ) {
 			throw( type = "Deploybot.Config", message = missingBlockMessage() );
 		}
+		return use( arguments.root, packageData.deploybot );
+	}
 
-		var block = packageData.deploybot;
+	/**
+	 * Uses and checks settings that are not in box.json yet. `deploybot init` calls it before it
+	 * writes anything. Throws Deploybot.Config like load().
+	 *
+	 * @root  The project root folder.
+	 * @block The settings: url, site, and an optional envFile.
+	 */
+	function use( required string root, required struct block ){
+		variables.root = reReplace( replace( arguments.root, "\", "/", "all" ), "/+$", "" );
 		variables.settings = {
-			url     : cleanUrl( block.url ?: "" ),
-			site    : trim( block.site ?: "" ),
-			envFile : trim( block.envFile ?: "" )
+			url     : cleanUrl( arguments.block.url ?: "" ),
+			site    : trim( arguments.block.site ?: "" ),
+			envFile : trim( arguments.block.envFile ?: "" )
 		};
 		if ( !len( variables.settings.envFile ) ) {
-			variables.settings.envFile = ".env.production";
+			variables.settings.envFile = defaultEnvFile();
 		}
 		validate();
 		return this;
+	}
+
+	/** Returns the env file name used when box.json names none. */
+	string function defaultEnvFile(){
+		return ".env.production";
 	}
 
 	/** Returns the DeployBot server URL without a final slash. */
@@ -118,8 +133,9 @@ component {
 		if ( !len( settings.site ) ) {
 			throw( type = "Deploybot.Config", message = "box.json deploybot.site is missing. #missingBlockMessage()#" );
 		}
-		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]*$", settings.site ) ) {
-			throw( type = "Deploybot.Config", message = "box.json deploybot.site must be a site slug such as ""my-site"". It may use letters, numbers, dots, dashes, and underscores." );
+		// The same rule as DeployBot's RefValidator: 1 to 80 characters, no dash at either end.
+		if ( !reFind( "^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$", settings.site ) ) {
+			throw( type = "Deploybot.Config", message = "box.json deploybot.site must be a site slug such as ""my-site"". It may use lower-case letters, numbers, and dashes, up to 80 characters. It can't start or end with a dash." );
 		}
 
 		var parts = parseUrl( settings.url );

@@ -81,6 +81,51 @@ component singleton {
 	}
 
 	/**
+	 * Returns a starter env file built from .env.example text. Each key line keeps its key and
+	 * loses its value, so `export KEY=dev` becomes `export KEY=`. Comments and blank lines stay.
+	 * The rest of a multi-line quoted value is dropped. Lines end with LF.
+	 *
+	 * @exampleText The .env.example text.
+	 */
+	string function templateFrom( required string exampleText ){
+		var out      = [];
+		var openQuote = "";
+		for ( var line in variables.lines( arguments.exampleText ) ) {
+			if ( len( openQuote ) ) {
+				// Skip the rest of a multi-line value up to the line that closes its quote.
+				if ( find( openQuote, line ) ) {
+					openQuote = "";
+				}
+				continue;
+			}
+			var match = reFind( variables.keyPattern, line, 1, true );
+			if ( match.pos[ 1 ] == 0 ) {
+				out.append( line );
+				continue;
+			}
+			var keyEnd = match.pos[ 1 ] + match.len[ 1 ] - 1;
+			out.append( reReplace( left( line, keyEnd ), "\s*=$", "=" ) );
+			openQuote = unclosedQuote( valueAfterKey( line, match ) );
+		}
+		return out.toList( chr( 10 ) ) & chr( 10 );
+	}
+
+	/**
+	 * Returns the quote character that starts a value and is not closed on the same line, or an
+	 * empty string.
+	 *
+	 * @raw The text after the first `=` on a line.
+	 */
+	private string function unclosedQuote( required string raw ){
+		var value = trim( arguments.raw );
+		var first = left( value, 1 );
+		if ( ( first == '"' || first == "'" ) && !find( first, value, 2 ) ) {
+			return first;
+		}
+		return "";
+	}
+
+	/**
 	 * Returns true when the raw text after `=` is a blank value.
 	 *
 	 * @raw The text after the first `=` on a line.
@@ -107,16 +152,9 @@ component singleton {
 	 * @text The .env text.
 	 */
 	private struct function parse( required string text ){
-		var body = arguments.text;
-		// Remove a byte order mark.
-		if ( len( body ) && asc( left( body, 1 ) ) == 65279 ) {
-			body = right( body, len( body ) - 1 );
-		}
-		body = body.replace( chr( 13 ) & chr( 10 ), chr( 10 ), "all" ).replace( chr( 13 ), chr( 10 ), "all" );
-
 		var order = [];
 		var blank = {};
-		for ( var line in body.listToArray( chr( 10 ), true ) ) {
+		for ( var line in variables.lines( arguments.text ) ) {
 			var match = reFind( variables.keyPattern, line, 1, true );
 			if ( match.pos[ 1 ] == 0 ) {
 				continue;
@@ -128,6 +166,26 @@ component singleton {
 			blank[ key ] = isBlankValue( valueAfterKey( line, match ) );
 		}
 		return { order : order, blank : blank };
+	}
+
+	/**
+	 * Splits .env text into lines. It removes a byte order mark, accepts CRLF and lone CR, and
+	 * drops the empty line after a final line break.
+	 *
+	 * @text The .env text.
+	 */
+	private array function lines( required string text ){
+		var body = arguments.text;
+		// Remove a byte order mark.
+		if ( len( body ) && asc( left( body, 1 ) ) == 65279 ) {
+			body = right( body, len( body ) - 1 );
+		}
+		body = body.replace( chr( 13 ) & chr( 10 ), chr( 10 ), "all" ).replace( chr( 13 ), chr( 10 ), "all" );
+		var result = body.listToArray( chr( 10 ), true );
+		if ( result.len() && !len( result.last() ) ) {
+			result.deleteAt( result.len() );
+		}
+		return result;
 	}
 
 	/**
