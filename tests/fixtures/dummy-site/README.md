@@ -45,8 +45,6 @@ box deploybot env push --dryRun
 The dry run shows the target file on the server, `SECRET` changed, and `API_KEY` added. That diff
 is against DeployBot's own fixture file. After a real push, the dry run shows "No changes".
 
-This repository is in Dropbox for its owner, so both commands also warn about a synced folder.
-
 A real `box deploybot env push` writes the file. The dummy site is not served, so it has no reinit
 or health URL. DeployBot reports both steps as warnings and does not roll back. The command says
 "Pushed, with warnings" and that the site was not reinitialized. DeployBot backs up the previous

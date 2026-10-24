@@ -27,6 +27,6 @@ box update commandbox-deploybot --system
 - It does not follow redirects, so the token never goes to another address.
 - It stores tokens outside every repository and outside the CommandBox config, which ForgeBox can
   sync.
-- It stops a push when git tracks the env file, and warns when a cloud service syncs it.
+- It stops a push when git tracks the env file, and warns when `.gitignore` does not cover it.
 
 The README section "Keep the env file safe" lists what you can do on your side.

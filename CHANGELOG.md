@@ -10,8 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Security
 
 - `env check` and `env push` stop when git tracks the env file. `--force` lets a push go ahead
-  anyway. They warn when `.gitignore` does not cover the file, and when the file is in a Dropbox,
-  OneDrive, iCloud Drive, or Google Drive folder. `init` reports the same problems.
+  anyway. They warn when `.gitignore` does not cover the file. `init` reports the same problems.
 - On macOS and Linux, the token file is now readable only by its owner (mode 600), and its folder
   is private (mode 700).
 - The README uses example addresses only. A section explains how to keep the env file safe, and

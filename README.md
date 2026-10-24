@@ -137,8 +137,6 @@ It also checks where the env file is. It asks git, and skips this part when git 
 
 - A file that git tracks is an error. Its values are already in the repository history.
 - A file that `.gitignore` does not cover is a warning.
-- A file in a Dropbox, OneDrive, iCloud Drive, or Google Drive folder is a warning. The service
-  keeps a copy of the secrets in the cloud.
 
 ### `box deploybot env push [--force] [--yes] [--dryRun]`
 
@@ -179,12 +177,8 @@ site. This skips the validation, backup, and health check.
 
 ## Keep the env file safe
 
-The env file holds production secrets in plain text. `.gitignore` keeps it out of git, but not
-out of other copies.
+The env file holds production secrets in plain text.
 
-- Keep it out of folders that a cloud service syncs. `env check` and `env push` warn about
-  Dropbox, OneDrive, iCloud Drive, and Google Drive. To keep a repository in such a folder, set
-  `envFile` to a full path outside it, such as `C:/Users/me/.deploybot/envs/my-site.env`.
 - Never commit it. `init` adds it to `.gitignore`. If git already tracks it, run
   `git rm --cached <file>` and change every secret in it. The old values stay in the history.
 - Keep `.env.example` free of real values. `init` copies its keys, not its values.

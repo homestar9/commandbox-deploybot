@@ -7,7 +7,7 @@
  *  2. Write the "deploybot" block in box.json. Other keys and their order stay as they were.
  *  3. Add the env file to .gitignore unless a rule there already covers it.
  *  4. Create the env file from .env.example with blank values, unless it exists.
- *  5. Report a file that git tracks or that a cloud service syncs (EnvSafety).
+ *  5. Report a file that git tracks (EnvSafety).
  *
  * Running it again on a site that is set up changes only what differs. It never overwrites an
  * env file and makes no network request. The command asks for the token afterwards.
@@ -65,7 +65,7 @@ component extends="commandbox-deploybot.models.BaseService" {
 		writeBlock( config );
 		ignoreEnvFile( config );
 		createEnvFile( config );
-		// .gitignore does not untrack a file, and a synced folder copies it to the cloud.
+		// .gitignore does not untrack a file that git already tracks.
 		variables.envSafety.usePrinter( variables.print ).check( config );
 		return { config : config, tokenSaved : variables.tokenStore.has( config.host(), config.site() ) };
 	}
