@@ -7,6 +7,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
 ### Changed
 
 - `env push` shows the push as it happens. It prints each step's result as soon as the step ends,
