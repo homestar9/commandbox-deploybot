@@ -7,6 +7,26 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
+### Changed
+
+- `env push` shows the push as it happens. It prints each step's result as soon as the step ends,
+  says when DeployBot reloads the site and checks its health, and prints every health attempt and
+  retry. This needs DeployBot 1.0.0-beta.10 or later; an older server answers when the push has
+  finished, and the steps print all at once as before.
+- When DeployBot reports that the site was already failing before the push (`site_down`), `env push`
+  says the new file was kept and the site is still down, instead of reporting a rollback.
+
+### Security
+
+- `env check` and `env push` stop when git tracks the env file. `--force` lets a push go ahead
+  anyway. They warn when `.gitignore` does not cover the file. `init` reports the same problems.
+- On macOS and Linux, the token file is now readable only by its owner (mode 600), and its folder
+  is private (mode 700).
+- The README uses example addresses only. A section explains how to keep the env file safe, and
+  the fallback no longer suggests plain FTP. `SECURITY.md` says how to report a problem.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

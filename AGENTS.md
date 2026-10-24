@@ -16,8 +16,9 @@ own DeployBot server. User docs: README.md.
 - `commands/deploybot/**/*.cfc` handle only arguments and prompts. The logic is in `models/`.
 - Models never call `error()`. They `throw( type = "Deploybot.*" )`, and the command's `guard()`
   turns that into a command error. This keeps models testable without running a command.
-- All HTTP goes through `DeploybotClient`. All token storage goes through `TokenStore`. Specs
-  stub those two.
+- All HTTP goes through `DeploybotClient`. All token storage goes through `TokenStore`. All git
+  calls go through `GitInspector`. Specs stub those three (`stubGit()` in `BaseSpec`). Only
+  `GitInspectorSpec` runs real git.
 - Never print or log a value from the env file or the token. Print key names only. Add a spec
   when you add output.
 - The server contract (URL, headers, JSON response, status codes) is documented in

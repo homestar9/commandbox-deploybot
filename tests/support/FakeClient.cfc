@@ -33,16 +33,42 @@ component {
 		required string token,
 		required any body,
 		boolean dryRun = false,
-		boolean force  = false
+		boolean force  = false,
+		boolean async  = false
 	){
 		variables.recorded.append( {
+			call   : "pushEnv",
 			url    : arguments.url,
 			site   : arguments.site,
 			token  : arguments.token,
 			bytes  : arrayLen( arguments.body ),
 			dryRun : arguments.dryRun,
-			force  : arguments.force
+			force  : arguments.force,
+			async  : arguments.async
 		} );
+		return next();
+	}
+
+	/** Records a progress call and returns the next queued response. */
+	struct function progress(
+		required string url,
+		required string site,
+		required string token,
+		required string deployId,
+		numeric offset = 0
+	){
+		variables.recorded.append( {
+			call     : "progress",
+			site     : arguments.site,
+			token    : arguments.token,
+			deployId : arguments.deployId,
+			offset   : arguments.offset
+		} );
+		return next();
+	}
+
+	/** Returns the next queued response, or throws a queued exception type. */
+	private struct function next(){
 		if ( !variables.queue.len() ) {
 			throw( type = "Spec.NoResponse", message = "FakeClient has no queued response." );
 		}

@@ -3,24 +3,30 @@
  *
  * The flow:
  *
- *  1. Run the local check. Missing keys stop the push unless force is true.
+ *  1. Run the local check. A file that git tracks or missing keys stop the push unless force is
+ *     true. A file outside .gitignore gets a warning.
  *  2. Send a dry run to the server and print the diff (key names only).
  *  3. Stop here for a dry run, or when nothing changed.
  *  4. Ask for confirmation unless yes is true.
  *  5. Push for real and print each deploy step, whether the server rolled back, and the record URL.
+ *     The push asks for async: a server that supports it answers 202 at once, and the push is
+ *     followed live (follow()): each step's result as it ends, a line when the reload and the
+ *     health check start, and every health attempt and retry. An older server answers when the
+ *     push has finished, and the steps print all at once.
  *
  * The server response is DeployBot's API envelope, { data, error, messages }. For a push, data is:
  *
  *   { ok, errorCode, dryRun, path, diff : { added, removed, changed }, missing, extra,
- *     steps : [ { id, status, summary } ], rolledBack, deployId, recordUrl }
+ *     steps : [ { id, status, summary } ], rolledBack, healthyBefore, queued, deployId, recordUrl }
  *
  * A refusal carries only { errorCode } in data. errorCode is one of: unauthorized, locked,
- * too_large, invalid_body, missing_keys, health_failed, reinit_failed, write_failed,
+ * too_large, invalid_body, missing_keys, health_failed, reinit_failed, site_down, write_failed,
  * https_required, rate_limited, method, not_found, internal. messages says it in words.
- * Status codes: 200 ok or dry run, 400, 401 (also for an unknown site), 403 https_required, 404
- * (no such API address; an address outside DEPLOYBOT_ADMIN_ALLOWLIST gets the plain 404 page),
- * 405, 409 locked, 413, 422 missing_keys, 429 rate limited, 500 write_failed or internal, and 502
- * health_failed or reinit_failed.
+ * Status codes: 200 ok or dry run, 202 accepted (async), 400, 401 (also for an unknown site), 403
+ * https_required, 404 (no such API address; an address outside DEPLOYBOT_ADMIN_ALLOWLIST gets the
+ * plain 404 page), 405, 409 locked, 413, 422 missing_keys, 429 rate limited, 500 write_failed or
+ * internal, and 502 health_failed, reinit_failed or site_down (the site was failing before the
+ * push, so the server kept the new file).
  *
  * This component never prints the env file values or the token. It prints key names, step
  * summaries from the server, and the record URL.
@@ -30,6 +36,23 @@ component extends="commandbox-deploybot.models.BaseService" {
 	property name="tokenStore" inject="TokenStore@commandbox-deploybot";
 	property name="envFile"    inject="EnvFile@commandbox-deploybot";
 	property name="deploybotClient" inject="DeploybotClient@commandbox-deploybot";
+
+	/** How long to wait between progress requests while following a push, in milliseconds. */
+	variables.pollMs = 1000;
+	/** Progress requests in a row that may fail before the push is given up on. */
+	variables.maxPollFailures = 5;
+	/** How long a push is followed at most, in seconds (the server allows a push 15 minutes). */
+	variables.maxWaitSeconds = 900;
+
+	/**
+	 * Sets the wait between progress requests. Specs set 0.
+	 *
+	 * @ms Milliseconds.
+	 */
+	function setPollMs( required numeric ms ){
+		variables.pollMs = arguments.ms;
+		return this;
+	}
 
 	/**
 	 * Pushes the site's env file. Throws Deploybot.* exceptions for every problem and for any
@@ -92,17 +115,24 @@ component extends="commandbox-deploybot.models.BaseService" {
 		}
 
 		heading( "Pushing to #config.site()#..." );
-		var result = interpret(
-			variables.deploybotClient.pushEnv(
-				url    = config.url(),
-				site   = config.site(),
-				token  = token,
-				body   = bytes,
-				dryRun = false,
-				force  = arguments.force
-			)
+		var response = variables.deploybotClient.pushEnv(
+			url    = config.url(),
+			site   = config.site(),
+			token  = token,
+			body   = bytes,
+			dryRun = false,
+			force  = arguments.force,
+			async  = true
 		);
-		printSteps( result );
+		// 202: the server runs the push and is followed live. An older server ignores async and
+		// answers when the push has finished, with every step at once.
+		var followed = response.statusCode == 202 && response.isJson && isStruct( response.json.data ?: "" );
+		var result   = followed ? interpret( asResponse( follow( config, token, response.json.data ) ), true ) : interpret( response );
+		if ( followed ) {
+			printRollback( result );
+		} else {
+			printSteps( result );
+		}
 		if ( hasFailedStep( result ) ) {
 			printRecord( result );
 			stop( "The push finished with a failed step. Check the steps above and the DeployBot record.", "Deploybot.PushFailed" );
@@ -110,6 +140,188 @@ component extends="commandbox-deploybot.models.BaseService" {
 		printOutcome( result );
 		printRecord( result );
 		return result;
+	}
+
+	/**
+	 * Follows a push the server accepted with 202 until it ends. It prints as the push goes: a
+	 * line when a slow step starts, every health attempt and retry, and each step's result, in
+	 * order. Returns the result struct a server that does not follow would have answered with.
+	 *
+	 * @config   The loaded DeploybotConfig.
+	 * @token    The env token.
+	 * @accepted The 202 answer's data: { queued, deployId, recordUrl }.
+	 */
+	private struct function follow( required any config, required string token, required struct accepted ){
+		var id        = toString( arguments.accepted.deployId ?: "" );
+		var recordUrl = toString( arguments.accepted.recordUrl ?: "" );
+		var where     = len( recordUrl ) ? recordUrl : "the site's history in DeployBot";
+		if ( !len( id ) ) {
+			stop( "DeployBot accepted the push but sent no record id to follow. Check the site's history in DeployBot.", "Deploybot.BadResponse" );
+		}
+		var state    = { offset : 0, shown : {} };
+		var failures = 0;
+		var started  = getTickCount();
+		var data     = {};
+		while ( true ) {
+			if ( ( getTickCount() - started ) / 1000 > variables.maxWaitSeconds ) {
+				stop( "DeployBot has run the push for more than #int( variables.maxWaitSeconds / 60 )# minutes. It may still be running; see #where#.", "Deploybot.Timeout" );
+			}
+			if ( variables.pollMs > 0 ) {
+				sleep( variables.pollMs );
+			}
+			var answer = {};
+			try {
+				answer = variables.deploybotClient.progress( arguments.config.url(), arguments.config.site(), arguments.token, id, state.offset );
+			} catch ( Deploybot exception ) {
+				answer = {};
+			}
+			if ( ( answer.statusCode ?: 0 ) != 200 || !( answer.isJson ?: false ) || !isStruct( answer.json.data ?: "" ) ) {
+				failures++;
+				if ( failures >= variables.maxPollFailures ) {
+					stop( "Lost track of the push: DeployBot did not answer #failures# progress requests in a row. The push may still be running on the server; see #where#.", "Deploybot.Timeout" );
+				}
+				continue;
+			}
+			failures = 0;
+			data     = answer.json.data;
+			report( data, state );
+			if ( isBoolean( data.terminal ?: "" ) && data.terminal ) {
+				break;
+			}
+		}
+		// every result, even one whose log line never ended
+		printResults( isArray( data.steps ?: "" ) ? data.steps : [], state, "" );
+		var outcome = isStruct( data.outcome ?: "" ) ? data.outcome : {};
+		return {
+			ok            : isBoolean( outcome.ok ?: "" ) && outcome.ok,
+			errorCode     : toString( outcome.error ?: "" ),
+			steps         : isArray( data.steps ?: "" ) ? data.steps : [],
+			rolledBack    : isBoolean( outcome.rolledBack ?: "" ) && outcome.rolledBack,
+			healthyBefore : isBoolean( outcome.healthyBefore ?: "" ) ? outcome.healthyBefore : true,
+			deployId      : id,
+			recordUrl     : recordUrl
+		};
+	}
+
+	/**
+	 * Prints what one progress answer adds. The log's new whole lines give the step starts and
+	 * the health attempts; the steps give each result, printed once and in order. A step's start
+	 * waits until the step before it has a result, because the server writes the log a moment
+	 * before it saves the steps.
+	 *
+	 * @data  The progress answer's data.
+	 * @state { offset, shown } carried from one answer to the next.
+	 */
+	private void function report( required struct data, required struct state ){
+		var steps = isArray( arguments.data.steps ?: "" ) ? arguments.data.steps : [];
+		var text  = toString( arguments.data.log ?: "" );
+		var pos   = 0;
+		while ( true ) {
+			var lineEnd = find( chr( 10 ), text, pos + 1 );
+			// a line still being written is read again with the next answer
+			if ( !lineEnd ) {
+				break;
+			}
+			var line   = mid( text, pos + 1, lineEnd - pos - 1 );
+			var header = reFind( "^=== step (\S+) \(([^)]*)\) ===$", line, 1, true );
+			if ( header.pos[ 1 ] ) {
+				var stepId = mid( line, header.pos[ 2 ], header.len[ 2 ] );
+				if ( !stepIndex( steps, stepId ) && hasOpenStep( steps ) ) {
+					break;
+				}
+				printResults( steps, arguments.state, stepId );
+				announce( stepId, mid( line, header.pos[ 3 ], header.len[ 3 ] ) );
+			} else {
+				var attempt = reFind( "^\[[0-9:]+\]\s+\[[^\]]*\]\s+((attempt [0-9]+/[0-9]+:|retrying in ).*)$", line, 1, true );
+				if ( attempt.pos[ 1 ] ) {
+					say( "      " & mid( line, attempt.pos[ 2 ], attempt.len[ 2 ] ) );
+				}
+			}
+			pos = lineEnd;
+		}
+		arguments.state.offset += pos;
+		if ( pos == len( text ) ) {
+			printResults( steps, arguments.state, "" );
+		}
+	}
+
+	/**
+	 * Prints the results not printed yet of the steps that have ended, up to the step stopId
+	 * (all of them when stopId is empty or not in the list).
+	 *
+	 * @steps  The steps from the progress answer.
+	 * @state  { offset, shown }.
+	 * @stopId The step to stop before.
+	 */
+	private void function printResults( required array steps, required struct state, required string stopId ){
+		for ( var i = 1; i <= arguments.steps.len(); i++ ) {
+			var step = arguments.steps[ i ];
+			if ( !isStruct( step ) ) {
+				continue;
+			}
+			if ( len( arguments.stopId ) && ( step.id ?: "" ) == arguments.stopId ) {
+				break;
+			}
+			if ( !arguments.state.shown.keyExists( i ) && !listFindNoCase( "running,queued", step.status ?: "" ) ) {
+				printStep( step );
+				arguments.state.shown[ i ] = true;
+			}
+		}
+	}
+
+	/**
+	 * Prints a line when a step that can take a while starts.
+	 *
+	 * @stepId   The step id.
+	 * @stepType The step type.
+	 */
+	private void function announce( required string stepId, required string stepType ){
+		if ( arguments.stepId == "precheck" ) {
+			say( "  Checking the site before writing the file..." );
+		} else if ( arguments.stepType == "http.reinit" ) {
+			say( "  Reloading the site..." );
+		} else if ( arguments.stepType == "http.health" ) {
+			say( "  Checking the site's health..." );
+		} else if ( arguments.stepId == "rollback" ) {
+			say( "  Putting the previous env file back..." );
+		}
+	}
+
+	/**
+	 * The position of the step with this id in the list, or 0.
+	 */
+	private numeric function stepIndex( required array steps, required string stepId ){
+		for ( var i = 1; i <= arguments.steps.len(); i++ ) {
+			if ( isStruct( arguments.steps[ i ] ) && ( arguments.steps[ i ].id ?: "" ) == arguments.stepId ) {
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * True when a step in the list has not ended yet.
+	 */
+	private boolean function hasOpenStep( required array steps ){
+		for ( var step in arguments.steps ) {
+			if ( isStruct( step ) && listFindNoCase( "running,queued", step.status ?: "" ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * A followed push's result as a client response, so interpret() decides it like any answer.
+	 *
+	 * @result What follow() returned.
+	 */
+	private struct function asResponse( required struct result ){
+		var status = 200;
+		if ( !arguments.result.ok ) {
+			status = listFindNoCase( "site_down,health_failed,reinit_failed", arguments.result.errorCode ) ? 502 : 500;
+		}
+		return { statusCode : status, isJson : true, json : { data : arguments.result, messages : [] } };
 	}
 
 	/**
@@ -140,9 +352,10 @@ component extends="commandbox-deploybot.models.BaseService" {
 	 * Deploybot exception for every response that is not ok. When the response carries steps or
 	 * missing keys, it prints them first.
 	 *
-	 * @response The struct from DeploybotClient: { statusCode, isJson, json }.
+	 * @response   The struct from DeploybotClient: { statusCode, isJson, json }.
+	 * @stepsShown True when follow() has printed the steps already.
 	 */
-	struct function interpret( required struct response ){
+	struct function interpret( required struct response, boolean stepsShown = false ){
 		var status = arguments.response.statusCode;
 		var data   = arguments.response.json.keyExists( "data" ) && isStruct( arguments.response.json.data ) ? arguments.response.json.data : {};
 
@@ -215,8 +428,20 @@ component extends="commandbox-deploybot.models.BaseService" {
 		if ( status == 429 ) {
 			stop( "DeployBot is rate limiting this client. Wait a minute and try again.", "Deploybot.RateLimited" );
 		}
+		if ( errorCode == "site_down" ) {
+			if ( !arguments.stepsShown ) printSteps( data );
+			printRecord( data );
+			stop(
+				"The env file was pushed, but the site was already failing before the push, so DeployBot kept the new file instead of rolling it back. The site is still down: its DeployBot record says why.",
+				"Deploybot.SiteDown"
+			);
+		}
 		if ( status == 502 || errorCode == "health_failed" || errorCode == "reinit_failed" ) {
-			printSteps( data );
+			if ( arguments.stepsShown ) {
+				printRollback( data );
+			} else {
+				printSteps( data );
+			}
 			printRecord( data );
 			var reason = errorCode == "reinit_failed" ? "the site did not reinitialize" : "the site failed its health check";
 			stop(
@@ -225,7 +450,7 @@ component extends="commandbox-deploybot.models.BaseService" {
 			);
 		}
 		if ( errorCode == "write_failed" ) {
-			printSteps( data );
+			if ( !arguments.stepsShown ) printSteps( data );
 			printRecord( data );
 			stop( "The push failed: DeployBot could not write the env file.", "Deploybot.PushFailed" );
 		}
@@ -252,8 +477,8 @@ component extends="commandbox-deploybot.models.BaseService" {
 	}
 
 	/**
-	 * Runs the local check and stops on missing keys unless force is true. With force, a missing
-	 * .env.example or missing keys become warnings.
+	 * Runs the local check and stops on a file that git tracks or on missing keys unless force is
+	 * true. With force, those and a missing .env.example become warnings.
 	 *
 	 * @config The loaded DeploybotConfig.
 	 * @force  True to continue after a failed check.
@@ -261,6 +486,12 @@ component extends="commandbox-deploybot.models.BaseService" {
 	private void function localCheck( required any config, required boolean force ){
 		var checker = service( "EnvChecker" );
 		var result  = {};
+		if ( checker.safety( arguments.config ).tracked ) {
+			if ( !arguments.force ) {
+				stop( "#arguments.config.envFile()# is tracked by git. Remove it from git and change its secrets, or use --force to push anyway.", "Deploybot.EnvTracked" );
+			}
+			warn( "Continuing with a file that git tracks because of --force." );
+		}
 		try {
 			result = checker.report( arguments.config );
 		} catch ( any exception ) {
@@ -386,25 +617,42 @@ component extends="commandbox-deploybot.models.BaseService" {
 		var steps = arguments.data.steps ?: [];
 		if ( isArray( steps ) ) {
 			for ( var step in steps ) {
-				if ( !isStruct( step ) ) {
-					continue;
-				}
-				var line = "  [#step.status ?: "?"#] #step.id ?: "?"# - #step.summary ?: ""#";
-				switch ( step.status ?: "" ) {
-					case "success":
-						good( line );
-						break;
-					case "warning":
-						warn( line );
-						break;
-					case "failed":
-						bad( line );
-						break;
-					default:
-						say( line );
+				if ( isStruct( step ) ) {
+					printStep( step );
 				}
 			}
 		}
+		printRollback( arguments.data );
+	}
+
+	/**
+	 * Prints one step as "[status] id - summary", colored by its status.
+	 *
+	 * @step A step struct from the server.
+	 */
+	private void function printStep( required struct step ){
+		var line = "  [#arguments.step.status ?: "?"#] #arguments.step.id ?: "?"# - #arguments.step.summary ?: ""#";
+		switch ( arguments.step.status ?: "" ) {
+			case "success":
+				good( line );
+				break;
+			case "warning":
+				warn( line );
+				break;
+			case "failed":
+				bad( line );
+				break;
+			default:
+				say( line );
+		}
+	}
+
+	/**
+	 * Prints whether the server rolled the env file back, when the result says.
+	 *
+	 * @data The result struct from the server.
+	 */
+	private void function printRollback( required struct data ){
 		if ( arguments.data.keyExists( "rolledBack" ) && isBoolean( arguments.data.rolledBack ) ) {
 			if ( arguments.data.rolledBack ) {
 				warn( "Rolled back: the previous env file is back in place." );

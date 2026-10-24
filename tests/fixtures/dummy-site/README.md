@@ -24,7 +24,10 @@ The specs don't use it. It is not part of the package.
 
    Run it again after you change the module.
 
-4. In this folder, save the token:
+4. In this folder, copy `sample.env` to `.env.production`. Git ignores `.env.production`, like
+   in a real site. `sample.env` holds fake values only.
+
+5. In this folder, save the token:
 
    ```bash
    box deploybot token set

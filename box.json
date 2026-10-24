@@ -1,6 +1,6 @@
 {
     "name":"commandbox-deploybot",
-    "version":"0.1.0",
+    "version":"0.2.0",
     "author":"Angry Sam Productions, Inc.",
     "location":"ForgeboxStorage",
     "slug":"commandbox-deploybot",
@@ -50,7 +50,18 @@
         "**/*.tar.gz",
         "**/*.tgz",
         "**/*.7z",
-        "**/*.rar"
+        "**/*.rar",
+        "/resources/",
+        "/webpack.config.js",
+        "/vite.config.js",
+        "/vitest.config.js",
+        "/docker-compose.yml",
+        "/test-harness/",
+        "/test-results/",
+        "/DEVNOTES.md",
+        "/RELEASE.md",
+        "/package.json",
+        "/package-lock.json"
     ],
     "installPaths":{
         "testbox":"testbox/"
