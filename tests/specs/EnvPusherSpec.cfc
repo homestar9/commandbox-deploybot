@@ -254,6 +254,124 @@ component extends="tests.support.BaseSpec" {
 				} );
 			} );
 
+			describe( "following an async push", function(){
+				beforeEach( function(){
+					pusher.setPollMs( 0 );
+					accepted = jsonResponse( 202, { ok : true, errorCode : "", queued : true, deployId : "d9", recordUrl : "https://deploybot.example.com/deploys/d9" } );
+				} );
+
+				it( "asks for async and prints each step, the health attempts and retries live, in order", function(){
+					var first = chr( 10 ) & "=== step precheck (http.health) ===" & chr( 10 )
+						& "[12:00:00] [precheck] GET https://x/health, expect 200, up to 1 attempt(s)" & chr( 10 )
+						& "[12:00:00] [precheck] attempt 1/1: HTTP 200 in 5ms" & chr( 10 );
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( accepted );
+					fakeClient.respond( progressResponse( [ step( "precheck", "running" ) ], first ) );
+					fakeClient.respond( progressResponse(
+						[ step( "precheck", "success", "HTTP 200" ), step( "write", "success", "wrote 2 key(s)" ), step( "acl", "success", "locked down" ), step( "http.reinit", "success", "HTTP 200" ), step( "http.health", "running" ) ],
+						chr( 10 ) & "=== step write (env.write) ===" & chr( 10 ) & "[12:00:01] [write] wrote 2 key(s)" & chr( 10 )
+						& chr( 10 ) & "=== step acl (env.acl) ===" & chr( 10 ) & "[12:00:01] [acl] icacls" & chr( 10 )
+						& chr( 10 ) & "=== step http.reinit (http.reinit) ===" & chr( 10 ) & "[12:00:02] [http.reinit] HTTP 200 in 9ms" & chr( 10 )
+						& chr( 10 ) & "=== step http.health (http.health) ===" & chr( 10 )
+						& "[12:00:02] [http.health] attempt 1/3: HTTP 500 in 18ms" & chr( 10 )
+						& "[12:00:02] [http.health] retrying in 3s" & chr( 10 )
+					) );
+					fakeClient.respond( progressResponse(
+						[ step( "precheck", "success", "HTTP 200" ), step( "write", "success", "wrote 2 key(s)" ), step( "acl", "success", "locked down" ), step( "http.reinit", "success", "HTTP 200" ), step( "http.health", "success", "HTTP 200 after 2 attempt(s)" ) ],
+						"[12:00:05] [http.health] attempt 2/3: HTTP 200 in 240ms" & chr( 10 ) & "[12:00:05] environment file push success (4.0s)" & chr( 10 ),
+						{ ok : true, error : "", rolledBack : false, healthyBefore : true }
+					) );
+					pusher.run( config = loadConfig( root ), yes = true );
+
+					expect( fakeClient.calls()[ 2 ].async ).toBeTrue();
+					expect( fakeClient.calls()[ 3 ].call ).toBe( "progress" );
+					expect( fakeClient.calls()[ 3 ].deployId ).toBe( "d9" );
+					expect( fakeClient.calls()[ 3 ].offset ).toBe( 0 );
+					expect( fakeClient.calls()[ 4 ].offset ).toBe( len( first ), "the next answer starts where the last one ended" );
+					var output = lines.toList( chr( 10 ) );
+					expect( inOrder( output, [
+						"Checking the site before writing the file...",
+						"attempt 1/1: HTTP 200 in 5ms",
+						"[success] precheck - HTTP 200",
+						"[success] write - wrote 2 key(s)",
+						"[success] acl - locked down",
+						"Reloading the site...",
+						"[success] http.reinit - HTTP 200",
+						"Checking the site's health...",
+						"attempt 1/3: HTTP 500 in 18ms",
+						"retrying in 3s",
+						"attempt 2/3: HTTP 200 in 240ms",
+						"[success] http.health - HTTP 200 after 2 attempt(s)",
+						"Rolled back: no",
+						"reinitialized and passed its health check",
+						"Record: https://deploybot.example.com/deploys/d9"
+					] ) ).toBe( "" );
+					expect( output ).notToInclude( "GET https://x/health", "only attempts and retries are forwarded" );
+				} );
+
+				it( "waits for a step's result before announcing the next step", function(){
+					var held = chr( 10 ) & "=== step http.reinit (http.reinit) ===" & chr( 10 );
+					var done = chr( 10 ) & "=== step write (env.write) ===" & chr( 10 ) & "[12:00:01] [write] wrote" & chr( 10 );
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( accepted );
+					// the log already has the reinit's start, the steps still show write running
+					fakeClient.respond( progressResponse( [ step( "write", "running" ) ], done & held ) );
+					fakeClient.respond( progressResponse(
+						[ step( "write", "success", "wrote" ), step( "http.reinit", "success", "HTTP 200" ), step( "http.health", "success", "HTTP 200" ) ],
+						mid( held, 2, len( held ) - 1 ),
+						{ ok : true, error : "", rolledBack : false, healthyBefore : true }
+					) );
+					pusher.run( config = loadConfig( root ), yes = true );
+
+					// past the blank line, up to the header: the header line is read again
+					expect( fakeClient.calls()[ 4 ].offset ).toBe( len( done ) + 1 );
+					expect( inOrder( lines.toList( chr( 10 ) ), [ "[success] write - wrote", "Reloading the site...", "[success] http.reinit - HTTP 200" ] ) ).toBe( "" );
+				} );
+
+				it( "says the site was already down when the server kept the file, printing each step once", function(){
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( accepted );
+					fakeClient.respond( progressResponse(
+						[ step( "precheck", "failed", "HTTP 500" ), step( "write", "success", "wrote" ), step( "http.reinit", "failed", "HTTP 500" ), step( "http.health", "failed", "HTTP 500" ) ],
+						"",
+						{ ok : false, error : "site_down", rolledBack : false, healthyBefore : false }
+					) );
+					expect( function(){
+						pusher.run( config = loadConfig( root ), yes = true );
+					} ).toThrow( type = "Deploybot.SiteDown", regex = "already failing before the push" );
+					var output = lines.toList( chr( 10 ) );
+					expect( ( output.len() - output.replace( "[success] write - wrote", "", "all" ).len() ) / len( "[success] write - wrote" ) ).toBe( 1, "printed once" );
+					expect( output ).toInclude( "Record: https://deploybot.example.com/deploys/d9" );
+				} );
+
+				it( "reports a failed health check and the rollback after following it", function(){
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( accepted );
+					fakeClient.respond( progressResponse(
+						[ step( "write", "success", "wrote" ), step( "http.health", "failed", "HTTP 500" ), step( "rollback", "success", "previous file restored" ) ],
+						"",
+						{ ok : false, error : "health_failed", rolledBack : true, healthyBefore : true }
+					) );
+					expect( function(){
+						pusher.run( config = loadConfig( root ), yes = true );
+					} ).toThrow( type = "Deploybot.PushFailed", regex = "health check.*rolled the env file back" );
+					var output = lines.toList( chr( 10 ) );
+					expect( output ).toInclude( "[success] rollback - previous file restored" );
+					expect( output ).toInclude( "Rolled back: the previous env file is back in place." );
+				} );
+
+				it( "gives up after five progress requests in a row fail, pointing at the record", function(){
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					fakeClient.respond( accepted );
+					for ( var i = 1; i <= 5; i++ ) {
+						fakeClient.respond( "Deploybot.Timeout" );
+					}
+					expect( function(){
+						pusher.run( config = loadConfig( root ), yes = true );
+					} ).toThrow( type = "Deploybot.Timeout", regex = "Lost track of the push.*deploys/d9" );
+				} );
+			} );
+
 			describe( "error mapping", function(){
 				var cases = [
 					{ status : 401, json : { ok : false, errorCode : "unauthorized" }, type : "Deploybot.Unauthorized", regex : "token is wrong, or the site slug" },
@@ -404,6 +522,38 @@ component extends="tests.support.BaseSpec" {
 		response.json.data.missing = arguments.missing;
 		response.json.data.extra   = arguments.extra;
 		return response;
+	}
+
+	/** Builds a progress answer: steps, the log since the asked offset, and the outcome once it has ended. */
+	private struct function progressResponse( required array steps, string log = "", struct outcome = {} ){
+		var ended = !structIsEmpty( arguments.outcome );
+		return jsonResponse( 200, {
+			found    : true,
+			id       : "d9",
+			status   : ended ? ( arguments.outcome.ok ? "success" : "failed" ) : "running",
+			terminal : ended,
+			steps    : arguments.steps,
+			log      : arguments.log,
+			outcome  : arguments.outcome
+		} );
+	}
+
+	/** A step as a progress answer lists it. */
+	private struct function step( required string id, required string status, string summary = "" ){
+		return { id : arguments.id, type : "", status : arguments.status, summary : arguments.summary };
+	}
+
+	/** "" when every needle appears in the text in this order, else the first one out of place. */
+	private string function inOrder( required string text, required array needles ){
+		var at = 0;
+		for ( var needle in arguments.needles ) {
+			var found = find( needle, arguments.text, at + 1 );
+			if ( !found ) {
+				return needle;
+			}
+			at = found;
+		}
+		return "";
 	}
 
 	/** Builds a successful real push response with the given steps. */

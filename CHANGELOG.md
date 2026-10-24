@@ -7,6 +7,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- `env push` shows the push as it happens. It prints each step's result as soon as the step ends,
+  says when DeployBot reloads the site and checks its health, and prints every health attempt and
+  retry. This needs DeployBot 1.0.0-beta.10 or later; an older server answers when the push has
+  finished, and the steps print all at once as before.
+- When DeployBot reports that the site was already failing before the push (`site_down`), `env push`
+  says the new file was kept and the site is still down, instead of reporting a rollback.
+
 ### Security
 
 - `env check` and `env push` stop when git tracks the env file. `--force` lets a push go ahead
