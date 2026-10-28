@@ -7,6 +7,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- `env push` exits with an error when you answer no. Scripts and release hooks then stop. It
+  prints "Cancelled" in yellow, not as an error message.
+- `env push` does not ask when the terminal cannot answer, such as in a release hook, in CI, or
+  with piped input or output. It stops with an error that says to use `--yes`. `echo y |` no
+  longer works; use `--yes`. "No changes" and `--dryRun` still finish without an error.
+
 ## [0.2.0] - 2026-10-23
 
 ### Changed

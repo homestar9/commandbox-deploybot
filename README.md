@@ -145,11 +145,15 @@ It also checks where the env file is. It asks git, and skips this part when git 
 2. Asks DeployBot for a dry run and prints the key names that would be added, removed, or
    changed. It also prints the keys DeployBot reports as missing or extra.
 3. Stops there with `--dryRun`. It also stops when nothing would change.
-4. Asks you to confirm. `--yes` skips the question.
+4. Asks you to confirm. `--yes` skips the question. If you answer no, the command stops and
+   exits with an error. If the terminal cannot answer, it stops before asking and says to use
+   `--yes`. This happens in CI, in a release hook, and when input or output is piped.
 5. Pushes for real. It prints each step (id, status, summary), whether DeployBot rolled back,
    and the URL of the deploy record.
 
-The command exits with an error if any step fails or the server answers with an error.
+The command exits with an error if any step fails, the server answers with an error, or you
+answer no. So a script such as `box deploybot env push && git push` stops when the push does
+not happen. "No changes" and `--dryRun` finish without an error.
 
 | Flag | Meaning |
 |---|---|
@@ -168,6 +172,26 @@ needs a key it does not have will fail.
 2. `box deploybot env check`
 3. `box deploybot env push`
 4. Release the code.
+
+Add a key in one release. Remove the old key in a later release, after no running code needs it.
+Never rename a key or change what a value means in one release.
+
+### Push from a release hook
+
+[commandbox-release](https://github.com/homestar9/commandbox-release) can run the push for you
+before it publishes. This needs a commandbox-release version with `hooks.beforePublish`. In
+`release.json`:
+
+```json
+{ "hooks": { "beforePublish": "deploybot env push --yes" } }
+```
+
+- Use `--yes`. The hook gets no input, so without `--yes` the push stops and so does the release.
+- "No changes" finishes without an error, so the hook is safe on every release.
+- The push reloads the live site. Use the hook only when the release's push starts the deploy.
+
+See [Run a command before publishing](https://github.com/homestar9/commandbox-release#run-a-command-before-publishing)
+for the rest.
 
 ## If DeployBot is not available
 

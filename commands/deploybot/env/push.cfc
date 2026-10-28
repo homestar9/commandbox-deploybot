@@ -7,6 +7,9 @@
  * reinitializes the site, and checks its health. It rolls back if that fails. This command
  * prints each step and the record URL. It exits with an error if any step fails.
  * .
+ * It also exits with an error if you answer no, or if the terminal cannot answer the question,
+ * such as in CI or a release hook. Use --yes in scripts.
+ * .
  * The command never prints the file's values or the token.
  * .
  * {code:bash}
@@ -30,16 +33,28 @@ component extends="commandbox-deploybot.models.BaseCommand" {
 	){
 		var config = loadConfig();
 		var args   = arguments;
+		// Without a confirm function the push stops before asking. CommandBox's check covers
+		// closed or piped input and output, the CI variable, and its nonInteractiveShell setting.
+		var confirmer = "";
+		if ( shell.isTerminalInteractive() ) {
+			confirmer = function( required string question ){
+				return confirm( question );
+			};
+		}
 		guard( function(){
-			service( "EnvPusher" ).run(
-				config  = config,
-				force   = args.force,
-				yes     = args.yes,
-				dryRun  = args.dryRun,
-				confirm = function( required string question ){
-					return confirm( question );
-				}
-			);
+			try {
+				service( "EnvPusher" ).run(
+					config  = config,
+					force   = args.force,
+					yes     = args.yes,
+					dryRun  = args.dryRun,
+					confirm = confirmer
+				);
+			} catch ( Deploybot.Cancelled exception ) {
+				// A "no" is a choice, not a failure: a yellow line, but still a failing exit code.
+				print.yellowLine( exception.message ).toConsole();
+				setExitCode( 1 );
+			}
 		} );
 	}
 }
