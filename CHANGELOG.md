@@ -7,6 +7,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
 ### Changed
 
 - `env push` exits with an error when you answer no. Scripts and release hooks then stop. It
