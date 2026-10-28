@@ -65,12 +65,24 @@ component extends="tests.support.BaseSpec" {
 					expect( fakeClient.calls()[ 2 ].dryRun ).toBeFalse();
 				} );
 
-				it( "does not push after a no", function(){
+				it( "does not push after a no, and stops with an error so scripts stop too", function(){
 					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
-					pusher.run( config = loadConfig( root ), confirm = confirmNo );
+					expect( function(){
+						pusher.run( config = loadConfig( root ), confirm = confirmNo );
+					} ).toThrow( type = "Deploybot.Cancelled", regex = "Nothing was changed" );
 
+					expect( asked.len() ).toBe( 1 );
 					expect( fakeClient.calls().len() ).toBe( 1 );
-					expect( lines.toList( chr( 10 ) ) ).toInclude( "Cancelled" );
+				} );
+
+				it( "stops when the input ends before an answer", function(){
+					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+					expect( function(){
+						pusher.run( config = loadConfig( root ), confirm = function( question ){
+							throw( type = "EndOfFileException", message = "EOF" );
+						} );
+					} ).toThrow( type = "Deploybot.NoAnswer", regex = "cannot answer.*--yes" );
+					expect( fakeClient.calls().len() ).toBe( 1 );
 				} );
 
 				it( "skips the question with --yes", function(){
@@ -82,12 +94,20 @@ component extends="tests.support.BaseSpec" {
 					expect( fakeClient.calls().len() ).toBe( 2 );
 				} );
 
-				it( "does not push without --yes when no confirm function is given", function(){
+				it( "does not push without --yes when no one can answer", function(){
 					fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
 					expect( function(){
 						pusher.run( config = loadConfig( root ) );
-					} ).toThrow( regex = "--yes" );
+					} ).toThrow( type = "Deploybot.NoAnswer", regex = "cannot answer.*--yes" );
 					expect( fakeClient.calls().len() ).toBe( 1 );
+				} );
+
+				it( "finishes without an error when nothing changed and no one can answer (release hook)", function(){
+					fakeClient.respond( diffResponse() );
+					pusher.run( config = loadConfig( root ) );
+
+					expect( fakeClient.calls().len() ).toBe( 1 );
+					expect( lines.toList( chr( 10 ) ) ).toInclude( "No changes" );
 				} );
 
 				it( "stops on missing local keys before any request", function(){
@@ -487,6 +507,14 @@ component extends="tests.support.BaseSpec" {
 						function(){
 							fakeClient.respond( "Deploybot.Timeout" );
 							pusher.run( config = loadConfig( root ), yes = true );
+						},
+						function(){
+							fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+							pusher.run( config = loadConfig( root ), confirm = confirmNo );
+						},
+						function(){
+							fakeClient.respond( diffResponse( [ "NEW_KEY" ] ) );
+							pusher.run( config = loadConfig( root ) );
 						},
 						function(){
 							writeText( root & "/.env.production", "APP_NAME=#secretValue#" );

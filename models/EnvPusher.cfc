@@ -7,7 +7,7 @@
  *     true. A file outside .gitignore gets a warning.
  *  2. Send a dry run to the server and print the diff (key names only).
  *  3. Stop here for a dry run, or when nothing changed.
- *  4. Ask for confirmation unless yes is true.
+ *  4. Ask for confirmation unless yes is true. A "no", or no way to answer, stops with an error.
  *  5. Push for real and print each deploy step, whether the server rolled back, and the record URL.
  *     The push asks for async: a server that supports it answers 202 at once, and the push is
  *     followed live (follow()): each step's result as it ends, a line when the reload and the
@@ -56,7 +56,8 @@ component extends="commandbox-deploybot.models.BaseService" {
 
 	/**
 	 * Pushes the site's env file. Throws Deploybot.* exceptions for every problem and for any
-	 * non-ok result, so the command exits with an error.
+	 * non-ok result, so the command exits with an error. A "no" to the question throws
+	 * Deploybot.Cancelled. A question no one can answer throws Deploybot.NoAnswer.
 	 *
 	 * @config  The loaded DeploybotConfig.
 	 * @force   True to push even when keys are missing.
@@ -110,8 +111,7 @@ component extends="commandbox-deploybot.models.BaseService" {
 		}
 		var ask = arguments.keyExists( "confirm" ) ? arguments.confirm : "";
 		if ( !arguments.yes && !confirmed( ask, "Push #changes# key change#( changes == 1 ? "" : "s" )# to #config.site()#?" ) ) {
-			say( "Cancelled. Nothing was changed on the server." );
-			return preview;
+			stop( "Cancelled. Nothing was changed on the server.", "Deploybot.Cancelled" );
 		}
 
 		heading( "Pushing to #config.site()#..." );
@@ -510,17 +510,24 @@ component extends="commandbox-deploybot.models.BaseService" {
 	}
 
 	/**
-	 * Asks the confirmation question through the function the command supplied. Without one,
-	 * the push stops, because a push must not run without an answer.
+	 * Asks the confirmation question through the function the command supplied. The command
+	 * gives no function when the terminal cannot answer. Then the push stops, because a push must
+	 * not run without an answer. It also stops when the input ends before an answer.
 	 *
 	 * @ask      The confirmation function, or an empty string when the caller gave none.
 	 * @question The question to ask.
 	 */
 	private boolean function confirmed( required any ask, required string question ){
+		var noAnswer = "A confirmation is needed, and this terminal cannot answer. Use --yes to push without the question.";
 		if ( !isCustomFunction( arguments.ask ) ) {
-			stop( "A confirmation is needed. Use --yes to skip it.", "Deploybot.Stop" );
+			stop( noAnswer, "Deploybot.NoAnswer" );
 		}
-		return arguments.ask( arguments.question );
+		try {
+			return arguments.ask( arguments.question );
+		} catch ( EndOfFileException exception ) {
+			// CommandBox throws this when stdin is closed, such as in a release hook.
+			stop( noAnswer, "Deploybot.NoAnswer" );
+		}
 	}
 
 	/**
