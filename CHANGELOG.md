@@ -7,6 +7,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-28
+
+### Changed
+
+- A release now runs the tests first and stops if one fails. This needs commandbox-release
+  3.6.0 or later.
+
 ## [0.3.0] - 2026-10-28
 
 ### Changed
