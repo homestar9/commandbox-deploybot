@@ -28,3 +28,4 @@ own DeployBot server. User docs: README.md.
 - User-facing text (messages, README, CHANGELOG, doc comments) uses short, plain sentences.
 - `testbox/` is a vendored dependency. Don't edit or search it.
 - `release.json` lets this module publish itself with commandbox-release (`box release publish`).
+  The release runs `run-script test` first (`testCommand`), so keep the tests green.

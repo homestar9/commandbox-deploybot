@@ -265,7 +265,8 @@ To try the commands against a local DeployBot, use the dummy site in `tests/fixt
 Its README has the steps.
 
 To publish this module, use [commandbox-release](https://github.com/homestar9/commandbox-release).
-`release.json` holds its settings.
+`release.json` holds its settings. A release runs `box run-script test` first and stops if a
+spec fails. This needs commandbox-release 3.6.0 or later.
 
 ## License
 
